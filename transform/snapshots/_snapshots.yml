@@ -1,0 +1,11 @@
+version: 2
+
+snapshots:
+  - name: subscriptions_snapshot
+    description: >
+      SCD2 history of subscription commercial attributes. A new version is
+      written only when plan, status, mrr_cents, seats, or canceled_at change.
+    columns:
+      - name: subscription_id
+        description: Subscription identifier. Not unique in this table; each version is a row.
+        tests: [not_null]
