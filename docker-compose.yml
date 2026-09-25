@@ -1,0 +1,76 @@
+# Local stack. mem_limit values are caps, not a measurement of resident memory.
+name: saas-analytics
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./app_db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - max_connections=40
+    mem_limit: 512m
+    restart: unless-stopped
+
+  airflow:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+      AIRFLOW__CORE__PARALLELISM: "4"
+      AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: "2"
+      AIRFLOW__SCHEDULER__PARSING_PROCESSES: "1"
+      AIRFLOW__WEBSERVER__WORKERS: "1"
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "false"
+      # Local dev key only. Rotate it if this UI is reachable off your machine.
+      AIRFLOW__CORE__FERNET_KEY: "TG3ZI14eMxAlObagr75RSTKZRrQlYI6KhGYwnPJ6qBA="
+      AIRFLOW__WEBSERVER__SECRET_KEY: "local-dev-only-change-me"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      AIRFLOW_ADMIN_USER: ${AIRFLOW_ADMIN_USER:-admin}
+      AIRFLOW_ADMIN_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-admin}
+      AIRFLOW_ADMIN_EMAIL: ${AIRFLOW_ADMIN_EMAIL:-saurav@example.com}
+      DATABASE_URL: postgresql://app:app@postgres:5432/app
+      WAREHOUSE_TARGET: ${WAREHOUSE_TARGET:-duckdb}
+      DUCKDB_PATH: /opt/airflow/project/warehouse/analytics.duckdb
+      PROJECT_DIR: /opt/airflow/project
+      PIPELINE_PYTHON: /opt/pipeline-venv/bin/python
+      PIPELINE_DBT: /opt/pipeline-venv/bin/dbt
+      PYTHONPATH: /opt/airflow/project
+      SNOWFLAKE_ACCOUNT: ${SNOWFLAKE_ACCOUNT:-}
+      SNOWFLAKE_USER: ${SNOWFLAKE_USER:-}
+      SNOWFLAKE_PASSWORD: ${SNOWFLAKE_PASSWORD:-}
+      SNOWFLAKE_ROLE: ${SNOWFLAKE_ROLE:-}
+      SNOWFLAKE_WAREHOUSE: ${SNOWFLAKE_WAREHOUSE:-ANALYTICS_WH}
+      SNOWFLAKE_DATABASE: ${SNOWFLAKE_DATABASE:-ANALYTICS}
+      SNOWFLAKE_LOADER_ROLE: ${SNOWFLAKE_LOADER_ROLE:-LOADER}
+      SNOWFLAKE_TRANSFORM_ROLE: ${SNOWFLAKE_TRANSFORM_ROLE:-TRANSFORMER}
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./:/opt/airflow/project
+      - ./airflow/dags:/opt/airflow/dags
+    mem_limit: 1536m
+    restart: unless-stopped
+    command: ["bash", "/opt/airflow/project/scripts/airflow_entrypoint.sh"]
+
+volumes:
+  pgdata:
