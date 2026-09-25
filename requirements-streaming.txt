@@ -1,0 +1,4 @@
+# Extra dependency for the lightweight consumer. The Spark container provides pyspark.
+kafka-python==2.2.15
+duckdb==1.5.5
+snowflake-connector-python==4.7.5
