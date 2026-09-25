@@ -1,0 +1,13 @@
+.git
+.venv
+venv
+**/__pycache__
+transform/target
+transform/dbt_packages
+transform/logs
+warehouse/*.duckdb
+warehouse/*.duckdb.wal
+infra/snowflake/.terraform
+**/*.tfstate
+*.log
+.env

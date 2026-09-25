@@ -1,0 +1,9 @@
+# Pinned to the newest dbt line that publishes both a DuckDB and a Snowflake adapter.
+# dbt-duckdb 1.11.x does not yet have a 1.12 build, so dbt-core stays on 1.11.
+psycopg[binary]==3.3.6
+Faker==40.39.0
+duckdb==1.5.5
+dbt-core==1.11.15
+dbt-duckdb==1.11.0
+dbt-snowflake==1.11.6
+snowflake-connector-python==4.7.5
