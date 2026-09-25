@@ -1,0 +1,69 @@
+version: 2
+
+models:
+  - name: fct_mrr_monthly
+    description: >
+      One row per month. ending_mrr_cents is the sum of org-level MRR at month
+      end. Component columns are signed cent deltas for that month. logo_churn_rate
+      is churned paying orgs that were paying at the start of the month, divided
+      by the count of paying orgs at the start of the month.
+    columns:
+      - name: month_start
+        tests: [unique, not_null]
+      - name: ending_mrr_cents
+        tests: [not_null, non_negative]
+      - name: beginning_mrr_cents
+        tests: [not_null, non_negative]
+      - name: logo_churn_rate
+        description: Null when there were no paying orgs at the start of the month.
+
+  - name: fct_plan_changes
+    description: One row per subscription event, with the classified movement type.
+    columns:
+      - name: event_id
+        tests: [unique, not_null]
+      - name: movement_type
+        tests: [not_null]
+
+  - name: fct_logins
+    description: >
+      Incremental login fact. Unique on login_id. New rows are detected with
+      _loaded_at so late-arriving events are not skipped.
+    columns:
+      - name: login_id
+        tests: [unique, not_null]
+      - name: org_id
+        tests: [not_null]
+      - name: logged_in_at
+        tests: [not_null]
+
+  - name: fct_login_activity_daily
+    description: Daily login counts by organization, rebuilt from fct_logins.
+    columns:
+      - name: activity_date
+        tests: [not_null]
+      - name: org_id
+        tests: [not_null]
+      - name: login_count
+        tests: [not_null]
+
+  - name: dim_organizations
+    description: >
+      One row per organization with the current subscription, user counts, and
+      the latest successful login. is_active includes trials. is_paying requires
+      positive MRR.
+    columns:
+      - name: org_id
+        tests: [unique, not_null]
+      - name: is_active
+        tests: [not_null]
+      - name: is_paying
+        tests: [not_null]
+
+  - name: fct_invoices
+    description: One row per invoice, as cleaned in staging.
+    columns:
+      - name: invoice_id
+        tests: [unique, not_null]
+      - name: amount_cents
+        tests: [not_null, non_negative]
