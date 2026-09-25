@@ -1,0 +1,207 @@
+version: 2
+
+models:
+  - name: stg_app__organizations
+    description: One row per organization, with status lowercased.
+    columns:
+      - name: org_id
+        tests: [unique, not_null]
+      - name: org_name
+        tests: [not_null]
+      - name: status
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["active", "churned"]
+
+  - name: stg_app__users
+    description: One row per user. A missing email is a source-quality warning, not a build failure.
+    columns:
+      - name: user_id
+        tests: [unique, not_null]
+      - name: org_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_app__organizations')
+                field: org_id
+      - name: email
+        tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: role
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["owner", "admin", "member"]
+      - name: status
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["active", "deactivated"]
+
+  - name: stg_app__subscriptions
+    description: >
+      Current subscription. Plan casing from the app is normalized here.
+      mrr_cents is not clamped; the non_negative test is the publish gate.
+    columns:
+      - name: subscription_id
+        tests: [unique, not_null]
+      - name: org_id
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_app__organizations')
+                field: org_id
+      - name: plan
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["trial", "starter", "growth", "enterprise"]
+      - name: status
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["trialing", "active", "past_due", "canceled"]
+      - name: mrr_cents
+        tests:
+          - not_null
+          - non_negative
+    tests:
+      - canceled_has_timestamp
+
+  - name: stg_app__subscription_events
+    description: One row per commercial event, in business time order.
+    columns:
+      - name: event_id
+        tests: [unique, not_null]
+      - name: subscription_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_app__subscriptions')
+                field: subscription_id
+      - name: org_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_app__organizations')
+                field: org_id
+      - name: event_type
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["created", "upgraded", "downgraded", "canceled", "reactivated"]
+      - name: occurred_at
+        tests: [not_null]
+      - name: mrr_cents_after
+        tests:
+          - non_negative
+
+  - name: stg_app__logins
+    description: >
+      One row per client_event_id. Retried events collapse to the latest recorded row.
+      Logins whose user_id is not in users are kept and warned, not dropped.
+    columns:
+      - name: login_id
+        tests: [unique, not_null]
+      - name: client_event_id
+        tests: [unique, not_null]
+      - name: org_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_app__organizations')
+                field: org_id
+      - name: user_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('stg_app__users')
+                field: user_id
+              config:
+                severity: warn
+                where: "user_id is not null"
+      - name: logged_in_at
+        tests: [not_null]
+      - name: idp
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["okta", "azure_ad", "google_workspace", "onelogin"]
+              config:
+                where: "idp is not null"
+
+  - name: stg_app__invoices
+    description: One row per invoice. Currency is uppercased.
+    columns:
+      - name: invoice_id
+        tests: [unique, not_null]
+      - name: org_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_app__organizations')
+                field: org_id
+      - name: amount_cents
+        tests:
+          - not_null
+          - non_negative
+      - name: currency
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["USD", "EUR", "GBP"]
+      - name: status
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["open", "paid", "void"]
+    tests:
+      - paid_has_timestamp
+
+  - name: int_subscription_movements
+    description: >
+      Subscription events classified into new, expansion, contraction, churn,
+      reactivation, or other. Trial starts with no MRR are other.
+    columns:
+      - name: event_id
+        tests: [unique, not_null]
+      - name: movement_type
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["new", "expansion", "contraction", "churn", "reactivation", "other"]
+      - name: occurred_month
+        tests: [not_null]
+
+  - name: int_org_month_mrr
+    description: One row per organization per month, holding MRR as of month end.
+    columns:
+      - name: org_month_key
+        tests: [unique, not_null]
+      - name: month_start
+        tests: [not_null]
+      - name: org_id
+        tests: [not_null]
+      - name: mrr_cents_after
+        tests:
+          - not_null
+          - non_negative
