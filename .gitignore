@@ -13,6 +13,7 @@ build/
 # Warehouse files and dbt build output are local state.
 warehouse/*.duckdb
 warehouse/*.duckdb.wal
+warehouse/cdc_checkpoints/
 transform/target/
 transform/dbt_packages/
 transform/logs/

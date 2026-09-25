@@ -1,5 +1,5 @@
 with source as (
-    select * from {{ source('app', 'logins') }}
+    {{ current_entity('logins') }}
 ),
 
 deduped as (

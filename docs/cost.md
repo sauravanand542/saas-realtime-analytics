@@ -32,3 +32,21 @@ observed usage. After `make up` on your machine, record what you actually see:
 | Date | Command you used to measure | Postgres | Airflow | Notes |
 | --- | --- | --- | --- | --- |
 | YYYY-MM-DD | _fill in, for example `docker stats`_ | _fill in_ | _fill in_ | |
+
+## CDC profile
+
+These caps are configuration from `docker-compose.cdc.yml`. They are not a measurement.
+Phase 1's caps still apply, because Postgres and Airflow stay up.
+
+| Service | mem_limit |
+| --- | --- |
+| Kafka (KRaft, no ZooKeeper) | 768 MB |
+| Debezium Connect | 1024 MB |
+| Spark consumer (`make cdc-up`) | 1536 MB |
+| Python consumer (`make cdc-up-python`) | 384 MB |
+
+After you start a profile, record what `docker stats` actually shows. Also paste the lines from `make cdc-lag` if you want a record of broker lag and the source-to-warehouse delay. Do not estimate either one.
+
+| Date | Profile | Command | Kafka | Connect | Consumer | Lag you observed | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| YYYY-MM-DD | _fill in_ | _fill in_ | _fill in_ | _fill in_ | _fill in_ | _fill in_ | |

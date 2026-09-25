@@ -15,6 +15,10 @@ fi
 
 export WAREHOUSE_TARGET="${WAREHOUSE_TARGET:-duckdb}"
 DBT_BIN="${PIPELINE_DBT:-dbt}"
+PY_BIN="${PIPELINE_PYTHON:-python3}"
+
+# Empty CDC tables let staging compile before the stream has produced a row.
+"${PY_BIN}" -m streaming.ensure_tables
 
 cd "${ROOT}/transform"
 
