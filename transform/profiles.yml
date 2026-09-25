@@ -1,0 +1,23 @@
+# No secrets in this file. Snowflake values come from the environment.
+# Empty defaults let `dbt parse` succeed on the duckdb target when Snowflake
+# is not configured. dbt renders every output, not only the selected target.
+saas_analytics:
+  target: duckdb
+  outputs:
+    duckdb:
+      type: duckdb
+      path: "{{ env_var('DUCKDB_PATH', '../warehouse/analytics.duckdb') }}"
+      schema: analytics
+      threads: 2
+    snowflake:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT', '') }}"
+      user: "{{ env_var('SNOWFLAKE_USER', '') }}"
+      password: "{{ env_var('SNOWFLAKE_PASSWORD', '') }}"
+      role: "{{ env_var('SNOWFLAKE_TRANSFORM_ROLE', 'TRANSFORMER') }}"
+      database: "{{ env_var('SNOWFLAKE_DATABASE', 'ANALYTICS') }}"
+      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE', 'ANALYTICS_WH') }}"
+      schema: staging
+      threads: 4
+      client_session_keep_alive: false
+      query_tag: saas_analytics_dbt

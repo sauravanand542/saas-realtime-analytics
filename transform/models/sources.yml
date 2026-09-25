@@ -1,0 +1,35 @@
+version: 2
+
+sources:
+  - name: app
+    description: >
+      Landing zone for the production app database. Phase 1 loads this schema
+      with a batch extract (_source_system = postgres_batch). A later CDC feed
+      can write the same column contract with _source_system = debezium.
+      Staging models list columns explicitly so extra landing metadata does
+      not leak into marts.
+    schema: raw
+    loader: ingest
+    loaded_at_field: _loaded_at
+    freshness:
+      warn_after: {count: 36, period: hour}
+      error_after: {count: 72, period: hour}
+    tables:
+      - name: organizations
+        description: Current organization records. Reloaded in full each batch.
+      - name: users
+        description: Current users. Email is nullable in the source.
+      - name: subscriptions
+        description: >
+          Current subscription row per organization. Plan text is not
+          normalized here. This is the snapshot source, after staging cleanup.
+      - name: subscription_events
+        description: >
+          Append-only commercial events. occurred_at is business time.
+          recorded_at is when the app stored the row and is the ingest watermark.
+      - name: logins
+        description: >
+          SSO login attempts. client_event_id can repeat when the client
+          retries. logged_in_at can be earlier than recorded_at.
+      - name: invoices
+        description: Billing documents. Status can change after issue, which bumps recorded_at.
