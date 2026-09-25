@@ -1,0 +1,83 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    env:
+      # Absolute path. The dbt SQLFluff templater opens DuckDB while compiling.
+      # An empty file is enough; compilation does not read warehouse tables.
+      WAREHOUSE_TARGET: duckdb
+      DUCKDB_PATH: ${{ github.workspace }}/warehouse/analytics.duckdb
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dev tools
+        run: pip install -r requirements-dev.txt
+      - name: Ruff
+        run: ruff check generator ingest scripts airflow
+      - name: SQLFluff
+        run: sqlfluff lint transform/models transform/macros transform/snapshots transform/tests
+
+  dbt-duckdb:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app -d app"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://app:app@localhost:5432/app
+      WAREHOUSE_TARGET: duckdb
+      DUCKDB_PATH: ${{ github.workspace }}/warehouse/analytics.duckdb
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pipeline dependencies
+        run: pip install -r requirements.txt
+      - name: Install Postgres client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Create the app schema
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f app_db/init/001_app_schema.sql
+      - name: Seed, ingest, and build
+        run: |
+          python -m generator --mode seed --seed 42
+          python -m ingest --target duckdb
+          ./scripts/dbt_build.sh
+      - name: Failure demo, then heal
+        run: |
+          python -m scripts.break_it
+          python -m scripts.heal_it
+
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.5"
+      - name: Format
+        working-directory: infra/snowflake
+        run: terraform fmt -check -recursive
+      - name: Init and validate
+        working-directory: infra/snowflake
+        run: |
+          terraform init -backend=false
+          terraform validate
