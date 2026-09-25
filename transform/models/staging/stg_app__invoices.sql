@@ -1,5 +1,5 @@
 with source as (
-    select * from {{ source('app', 'invoices') }}
+    {{ current_entity('invoices') }}
 ),
 
 renamed as (

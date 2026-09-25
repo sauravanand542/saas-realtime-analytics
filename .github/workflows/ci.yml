@@ -21,7 +21,7 @@ jobs:
       - name: Install dev tools
         run: pip install -r requirements-dev.txt
       - name: Ruff
-        run: ruff check generator ingest scripts airflow
+        run: ruff check generator ingest scripts airflow streaming
       - name: SQLFluff
         run: sqlfluff lint transform/models transform/macros transform/snapshots transform/tests
 
@@ -65,6 +65,20 @@ jobs:
         run: |
           python -m scripts.break_it
           python -m scripts.heal_it
+      - name: CDC overlap in staging
+        run: python -m streaming.overlap_check
+
+  consumer-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pipeline dependencies
+        run: pip install -r requirements.txt pytest==8.3.5
+      - name: Consumer dedup tests
+        run: python -m pytest streaming/tests -q
 
   terraform:
     runs-on: ubuntu-latest
