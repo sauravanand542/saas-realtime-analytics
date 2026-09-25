@@ -1,0 +1,33 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+
+# Warehouse files and dbt build output are local state.
+warehouse/*.duckdb
+warehouse/*.duckdb.wal
+transform/target/
+transform/dbt_packages/
+transform/logs/
+transform/.user.yml
+
+# Airflow local metadata and logs.
+airflow/logs/
+
+# Terraform local state and downloaded providers.
+infra/snowflake/.terraform/
+infra/snowflake/*.tfstate
+infra/snowflake/*.tfstate.*
+infra/snowflake/crash.log
+*.tfvars
+!*.tfvars.example
+
+.DS_Store
+*.log
