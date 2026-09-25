@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars only if you want names other than the defaults.
+# terraform.tfvars is gitignored. Do not put passwords in it; the provider
+# reads SNOWFLAKE_ORGANIZATION_NAME, SNOWFLAKE_ACCOUNT_NAME, SNOWFLAKE_USER,
+# SNOWFLAKE_PASSWORD, and SNOWFLAKE_ROLE from the environment.
+
+# database_name         = "ANALYTICS"
+# warehouse_name        = "ANALYTICS_WH"
+# auto_suspend_seconds  = 60
+# grant_to_user         = "YOUR_SNOWFLAKE_USER"
