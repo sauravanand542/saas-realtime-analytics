@@ -2,3 +2,4 @@
 ruff==0.16.9
 sqlfluff==4.3.0
 sqlfluff-templater-dbt==4.3.0
+pytest==8.3.5
