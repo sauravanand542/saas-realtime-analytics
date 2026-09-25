@@ -1,8 +1,10 @@
 """Column contract for the raw landing tables.
 
-Phase 2 can land a CDC feed into these same tables. Staging models select
-columns by name, so extra CDC metadata can be added later without rewriting
-the marts. `_source_system` is `postgres_batch` today and `debezium` later.
+Batch ingest writes current rows to `raw.<table>` with `_source_system =
+postgres_batch`. The CDC consumer writes one row per change to
+`raw.<table>_cdc` with `_source_system = debezium` and the same business
+columns. Staging picks the latest version per key. Extra JSON fields stay in
+`_extra` until the contract and the staging select learn them.
 """
 
 from __future__ import annotations

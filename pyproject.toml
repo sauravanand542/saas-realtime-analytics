@@ -1,14 +1,14 @@
 [project]
 name = "saas-analytics"
 version = "0.1.0"
-description = "Phase 1 batch analytics for a simulated B2B SaaS product."
+description = "Batch and CDC analytics for a simulated B2B SaaS product."
 requires-python = ">=3.11"
 readme = "README.md"
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-src = ["generator", "ingest", "scripts", "airflow"]
+src = ["generator", "ingest", "scripts", "airflow", "streaming"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
