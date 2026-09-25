@@ -1,6 +1,6 @@
 # Decision log
 
-Short notes on choices in Phase 1. Prices in `generator/config.py` are inputs to the simulator. They are not measurements of a product.
+Short notes on choices in the batch pipeline and the CDC profile. Prices in `generator/config.py` are inputs to the simulator. They are not measurements of a product.
 
 ## DuckDB is the default warehouse
 
@@ -8,9 +8,9 @@ Local development and CI need a warehouse that costs nothing and starts without 
 
 dbt-core is pinned to 1.11 because that is the newest release line that publishes both `dbt-duckdb` and `dbt-snowflake`. A newer core would drop the local adapter.
 
-## Batch first, CDC later
+## Batch and CDC side by side
 
-The teaching goal of this phase is the warehouse layout, tests, and orchestration. A batch extract is enough to produce a raw schema with a column contract, a load timestamp, a batch id, and `_source_system`. Phase 2 can write a CDC stream into the same tables with `_source_system = debezium`. Staging selects named columns, so new landing metadata does not have to flow into marts.
+The batch extract is still the backfill and the path CI runs. It writes one current row per key to `raw.<table>` with `_source_system = postgres_batch`. The CDC consumer writes one row per change to `raw.<table>_cdc` with `_source_system = debezium` and the same business columns. Staging unions the batch snapshot with the latest CDC row per key. A newer CDC commit hides the snapshot. A newer snapshot hides older CDC. A winning delete removes the key. Marts still read staging, so they did not have to learn about Kafka.
 
 ## Full extract for mutable entities, watermark for facts
 
@@ -89,3 +89,47 @@ The point of the DAG is the gate and the retry policy. A newer Airflow major ver
 ## Quoting and profiles
 
 dbt quoting is left off. Ingest creates raw tables with unquoted identifiers so DuckDB and Snowflake fold them the same way dbt will. Relative `DUCKDB_PATH` values are resolved from the repo root by the Makefile and `scripts/dbt_build.sh`, because dbt resolves a relative profile path from `transform/`.
+
+## CDC instead of a shorter poll
+
+Polling the app tables more often would still miss a row that was inserted and deleted between two polls, and it would still couple freshness to the scheduler. Logical replication emits the insert, the update, and the delete in commit order. The batch job remains for backfill and for the day the stream is down. The two-day watermark lookback is the batch version of the same idea; CDC replaces that lookback for the tables in the publication.
+
+## Why Debezium and pgoutput
+
+Debezium's Postgres connector already turns the write-ahead log into keyed Kafka records with an operation, a before image, an after image, and source metadata (`lsn`, `ts_ms`). Building that parser by hand would be the whole project. `pgoutput` is the logical decoding plugin shipped with Postgres, so the image does not need `wal2json` or a custom `.so`. A dedicated `replicator` role has `REPLICATION` and `SELECT` on `app`. It cannot write the app tables. The publication lists the six tables explicitly. `publication.autocreate.mode=disabled` means a missing publication fails the connector instead of silently creating a different one.
+
+Kafka runs in KRaft mode: one process is broker and controller. ZooKeeper would be another JVM for no benefit on a single node. The CDC stack is a Compose profile so `make up` still starts only Postgres and Airflow.
+
+## At-least-once delivery, idempotent writes
+
+The consumer does not claim exactly-once across Kafka and DuckDB. Those systems do not share a transaction. The practical guarantee is:
+
+1. Read a batch with auto-commit off.
+2. Insert into the warehouse. The primary key plus a dedup token (`lsn:<lsn>:offset:<offset>`, or the Kafka coordinates for a tombstone) rejects a redelivery.
+3. Commit the Kafka offset, or let Spark write the checkpoint, only after that insert commits.
+
+A crash after the insert and before the offset commit redelivers the batch. The second insert changes nothing. A crash before the insert leaves a gap that the redelivery fills. Committing the offset first would acknowledge a batch that never landed.
+
+Spark Structured Streaming uses the same function inside `foreachBatch`. The checkpoint is the offset commit, and it is written after the function returns. The Python consumer calls `commit()` after `apply_records`. Same rule, smaller process.
+
+## Spark by default, Python when the laptop is tight
+
+Spark is the default consumer because the interesting streaming behavior (micro-batches, a checkpoint, replay from that checkpoint) is what the Spark background is for. A local `local[1]` driver is still a JVM. The Python consumer calls the same parse and merge code and is the process to run when the extra heap is not available (`make cdc-up-python`). Unit tests exercise that shared code with fixture envelopes and never start a broker. CI does not download Spark.
+
+`foreachBatch` collects the micro-batch in the driver. That is acceptable for this volume. A larger feed would write from the executors. The dedup rule would not change.
+
+## Deletes are soft in the change log
+
+An `op=d` event stores the before image, `_deleted=true`, and the source LSN. A tombstone (null value, key only) stores a delete with a Kafka dedup token because it has no LSN. The change table keeps both. Staging ranks CDC rows by Kafka offset, then LSN, and compares that winner's commit time (`_source_ts`, or `_loaded_at` when a tombstone has no commit time) with the batch snapshot's `_loaded_at`. If the winner is a delete, the key disappears from staging. The batch table is not mutated, so a later snapshot can bring the key back if it is newer than the delete.
+
+`subscriptions_snapshot` uses `hard_deletes='ignore'`. A key that leaves staging does not close the SCD2 row. That is the same behavior as a subscription that disappears from a batch reload.
+
+A destructive `make seed` writes historical `updated_at` values and a new `_loaded_at`. CDC events whose `_source_ts` is later than that snapshot still win, including deletes of organizations the seed just recreated. After a re-seed, truncate `raw.*_cdc` or the stream and the snapshot disagree on purpose.
+
+## Schema changes land in `_extra`
+
+The consumer projects the known contract columns and writes every other JSON field to `_extra`. The stream keeps going. The new column is not in staging until it is added to `ingest/contract.py` (or `CDC_PROMOTED_COLUMNS` for a local trial) and to the staging select. `make cdc-schema-change` shows the unknown field in `_extra`, then an `ALTER TABLE` plus a backfill from `_extra`. Debezium's pgoutput payload already contains the new column; the warehouse contract is what withholds it from marts.
+
+## The health DAG does not run the stream
+
+`saas_cdc_health` checks the Connect REST status and prints lag. A stream is a long-running process with its own checkpoint. Scheduling it as a task would start a second consumer or kill it at the task timeout. When the CDC profile is off, the DAG's check exits 0 and says it skipped. Connector failures retry. Data-test failures in the batch DAG still do not.
