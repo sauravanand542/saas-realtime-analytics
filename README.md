@@ -76,6 +76,10 @@ Marts:
 - `fct_invoices` — invoice facts.
 - `subscriptions_snapshot` — SCD Type 2 history of plan, status, MRR, seats, and cancellation time.
 
+## Requirements
+
+Python 3.11 or 3.12 is enough. CI uses 3.12. dbt is pinned to 1.11 because that is the newest line that publishes both `dbt-duckdb` and `dbt-snowflake`.
+
 ## Run it on WSL2
 
 Use Ubuntu on WSL2 with Docker Engine installed inside the distro, or Docker Desktop with the WSL integration enabled. Give the distro enough memory for the profile you start. These are caps, not observed usage. Record what you actually see in `docs/cost.md`.
@@ -99,6 +103,12 @@ make up
 
 Wait until Postgres is healthy (`docker compose ps`). Airflow is at [http://localhost:8080](http://localhost:8080). The local UI user and password are `admin` / `admin` unless you change them in `.env`. The DAG `saas_analytics_batch` is paused on creation and scheduled at 06:00 UTC. Unpause it when you want the scheduler to run it, or trigger it by hand.
 
+If Postgres fails its first init, the data volume is left half-written. Init scripts run only on an empty volume, so a retry will not run them again. Remove the volume first:
+
+```bash
+docker compose down -v
+```
+
 Commands you run on the host talk to Postgres at `localhost:5432`. The Airflow container uses the hostname `postgres`. Do not run a host `dbt build` and an Airflow dbt task at the same time: DuckDB allows one writer on `warehouse/analytics.duckdb`.
 
 ```bash
@@ -114,7 +124,7 @@ make down
 
 ## Change data capture
 
-`make cdc-up` recreates Postgres with `wal_level=logical`, `max_wal_senders=4`, and `max_replication_slots=4`. The data volume is kept. Init scripts do not re-run on an existing volume, so create the publication yourself:
+`make cdc-up` recreates Postgres with `wal_level=logical`, `max_wal_senders=4`, and `max_replication_slots=4`. The data volume is kept. Init scripts do not re-run on an existing volume, and they do not create the publication on a fresh one either. That SQL is `app_db/cdc/002_cdc.sql`. It is not mounted into `/docker-entrypoint-initdb.d`, so a plain `make up` never runs it. After `make cdc-up`, apply it yourself. The same two commands work when the volume already has Phase 1 data and when `make cdc-up` created the volume:
 
 ```bash
 make cdc-prepare
@@ -139,10 +149,6 @@ make consumer-test
 ```
 
 The four demo targets run against a temporary DuckDB file, so they do not need Kafka and they do not touch `warehouse/analytics.duckdb`. `LIVE=1` adds a broker reachability check when you have the profile up. What each demo proves is in `docs/walkthrough.md`.
-
-## Failure demo
-
-Python 3.11 or 3.12 is enough. CI uses 3.12. dbt is pinned to 1.11 because that is the newest line that publishes both `dbt-duckdb` and `dbt-snowflake`.
 
 ## Failure demo
 
