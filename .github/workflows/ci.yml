@@ -152,6 +152,33 @@ jobs:
           docker compose exec -T postgres psql -U app -d app -v ON_ERROR_STOP=1 -tA -c \
             "SELECT pubname FROM pg_publication WHERE pubname = 'app_publication'" | grep -qx app_publication
           docker compose -f docker-compose.yml -f docker-compose.cdc.yml down -v
+      - name: Base compose boots a volume that already has a logical slot
+        run: |
+          set -euxo pipefail
+          if ! docker compose -f docker-compose.yml -f docker-compose.cdc.yml up -d --wait --wait-timeout 120 postgres; then
+            docker compose -f docker-compose.yml -f docker-compose.cdc.yml logs postgres
+            exit 1
+          fi
+          make cdc-prepare
+          docker compose -f docker-compose.yml -f docker-compose.cdc.yml exec -T postgres \
+            psql -U app -d app -v ON_ERROR_STOP=1 -c \
+            "SELECT pg_create_logical_replication_slot('saas_app_slot', 'pgoutput')"
+          docker compose -f docker-compose.yml -f docker-compose.cdc.yml stop postgres
+          if ! docker compose up -d --wait --wait-timeout 120 postgres; then
+            docker compose logs postgres
+            docker inspect saas-analytics-postgres-1 || true
+            exit 1
+          fi
+          docker inspect -f '{{.State.Health.Status}}' saas-analytics-postgres-1 | grep -qx healthy
+          docker compose exec -T postgres psql -U app -d app -v ON_ERROR_STOP=1 -tA -c \
+            "SHOW wal_level" | grep -qx logical
+          docker compose exec -T postgres psql -U app -d app -v ON_ERROR_STOP=1 -tA -c \
+            "SELECT slot_name FROM pg_replication_slots WHERE slot_name = 'saas_app_slot'" | grep -qx saas_app_slot
+          make cdc-reset
+          make cdc-reset
+          docker compose exec -T postgres psql -U app -d app -v ON_ERROR_STOP=1 -tA -c \
+            "SELECT count(*) FROM pg_replication_slots WHERE slot_name = 'saas_app_slot'" | grep -qx 0
+          docker compose down --remove-orphans -v
 
   compose-cdc-images:
     runs-on: ubuntu-latest

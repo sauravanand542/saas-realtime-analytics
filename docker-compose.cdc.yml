@@ -2,10 +2,11 @@
 #   docker compose -f docker-compose.yml -f docker-compose.cdc.yml --profile cdc up
 # `make up` does not load this file, so Phase 1 stays Postgres + Airflow.
 #
-# Publication SQL is app_db/cdc/002_cdc.sql, applied by `make cdc-prepare`
-# after this file has restarted Postgres. Do not add that script to
-# /docker-entrypoint-initdb.d. Init runs only on an empty volume, and the
-# Phase 1 command is not in logical WAL mode.
+# Publication SQL is app_db/cdc/002_cdc.sql, applied by `make cdc-prepare`.
+# Do not add that script to /docker-entrypoint-initdb.d. Init runs only on
+# an empty volume, and a plain `make up` should not create the publication.
+# Postgres wal_level, max_wal_senders, and max_replication_slots are set on
+# the base service. Do not override that command here.
 #
 # mem_limit values are caps, not a measurement of resident memory.
 # Phase 1 caps stay 512 MB (Postgres) and 1536 MB (Airflow).
@@ -15,20 +16,6 @@
 name: saas-analytics
 
 services:
-  postgres:
-    command:
-      - postgres
-      - -c
-      - shared_buffers=128MB
-      - -c
-      - max_connections=40
-      - -c
-      - wal_level=logical
-      - -c
-      - max_wal_senders=4
-      - -c
-      - max_replication_slots=4
-
   airflow:
     environment:
       CDC_CONNECT_URL: http://connect:8083

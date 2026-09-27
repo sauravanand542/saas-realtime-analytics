@@ -13,20 +13,29 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       # Phase 1 init only. The CDC publication script is app_db/cdc/002_cdc.sql
-      # and is applied by `make cdc-prepare`. Do not mount it here: this command
-      # does not set wal_level=logical, and a failing script aborts first init.
+      # and is applied by `make cdc-prepare`. Do not mount it here: a plain
+      # `make up` should not create the replication role or the publication.
       - ./app_db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U app -d app"]
       interval: 5s
       timeout: 5s
       retries: 10
+    # Keep these on the base service. docker-compose.cdc.yml must not override
+    # them. A logical slot lives on the volume; Postgres crash-loops with
+    # "wal_level < logical" if a later `make up` starts without wal_level=logical.
     command:
       - postgres
       - -c
       - shared_buffers=128MB
       - -c
       - max_connections=40
+      - -c
+      - wal_level=logical
+      - -c
+      - max_wal_senders=4
+      - -c
+      - max_replication_slots=4
     mem_limit: 512m
     restart: unless-stopped
 
