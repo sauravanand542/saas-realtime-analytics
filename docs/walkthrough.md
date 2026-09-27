@@ -14,7 +14,7 @@ Things that are deliberate:
 
 `000_airflow.sh` creates the Airflow metadata role and database on first Docker init. It is shell because `CREATE DATABASE` cannot run inside the entrypoint's SQL transaction.
 
-`app_db/cdc/002_cdc.sql` is not in this directory. The entrypoint runs every file in `app_db/init`, and that script raises unless `wal_level` is `logical`. Phase 1 Postgres is not. `make cdc-prepare` applies it after `docker-compose.cdc.yml` has restarted Postgres.
+`app_db/cdc/002_cdc.sql` is not in this directory. The entrypoint runs every file in `app_db/init`, and a plain `make up` should not create the publication. `wal_level=logical` is set on the base Postgres service, so a volume that already holds `saas_app_slot` still boots. `make cdc-prepare` applies the publication when you want CDC.
 
 ## 2. Generator
 
@@ -101,7 +101,7 @@ The generator's tick skips subscriptions that already have negative MRR, so a la
 
 Start Phase 1 first if you want the marts. The CDC profile is optional.
 
-`docker-compose.cdc.yml` turns on logical replication, Kafka in KRaft mode (no ZooKeeper), and Debezium Connect. `make cdc-prepare` runs `app_db/cdc/002_cdc.sql`. It is idempotent: replication role `replicator`, `SELECT` on `app`, publication `app_publication` for the six tables. The same command works on a volume created by `make cdc-up` and on a volume that already has Phase 1 data. The connector config is `streaming/register_connector.py`: plugin `pgoutput`, slot `saas_app_slot`, JSON without schemas, tombstones left on.
+`docker-compose.cdc.yml` adds Kafka in KRaft mode (no ZooKeeper) and Debezium Connect. Logical WAL is already on in `docker-compose.yml`. `make cdc-prepare` runs `app_db/cdc/002_cdc.sql`. It is idempotent: replication role `replicator`, `SELECT` on `app`, publication `app_publication` for the six tables. The same command works on a volume created by `make cdc-up` and on a volume that already has Phase 1 data. The connector config is `streaming/register_connector.py`: plugin `pgoutput`, slot `saas_app_slot`, JSON without schemas, tombstones left on. `make cdc-down` leaves that slot in place, and the slot retains WAL until `make cdc-reset` drops it.
 
 The consumer reads topics `saas.app.<table>`. `streaming/messages.py` turns an envelope into a change or a dead letter. `streaming/store.py` inserts it. Spark (`streaming/spark_consumer.py`) is what `make cdc-up` runs. The image keeps Spark 3.5.5 and runs the driver on Python 3.12 at `/opt/py/bin/python`, because the base image's `python3` cannot install the pinned `duckdb`. `make cdc-up-python` runs `streaming/python_consumer.py` with the same `apply_records` function, on `python:3.12-slim`. Offsets commit after the warehouse transaction, and the DuckDB connection is already closed by then. Spark's version of that commit is the checkpoint under `warehouse/cdc_checkpoints`. A host `make cdc-lag` or `make dbt-build` can open the file between batches. See `docs/decisions.md` for the single-writer limit. Snowflake does not have it. Debezium Connect is a Java image and does not install those Python packages.
 

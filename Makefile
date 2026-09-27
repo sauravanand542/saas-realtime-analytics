@@ -23,13 +23,13 @@ endif
 COMPOSE_CDC := docker compose -f docker-compose.yml -f docker-compose.cdc.yml
 
 .PHONY: help up down logs seed tick ingest dbt-build dbt-docs test break-it heal lint tf-fmt tf-validate \
-	cdc-up cdc-up-python cdc-down cdc-prepare cdc-register cdc-lag \
+	cdc-up cdc-up-python cdc-down cdc-reset cdc-prepare cdc-register cdc-lag \
 	cdc-replay cdc-schema-change cdc-crash cdc-poison consumer-test require-python \
 	warn-airflow-uid
 
 help:
 	@echo "up          Start Postgres and Airflow"
-	@echo "down        Stop the stack"
+	@echo "down        Stop the stack and remove containers from the other profile"
 	@echo "logs        Follow compose logs"
 	@echo "seed        Replace app data with a deterministic history (SEED, default 42)"
 	@echo "tick        Apply one round of ongoing changes"
@@ -44,7 +44,9 @@ help:
 	@echo "tf-validate terraform init and validate (no Snowflake credentials required)"
 	@echo "cdc-up      Start Phase 1 plus Kafka, Debezium, and the Spark consumer"
 	@echo "cdc-up-python  Same, with the Python consumer instead of Spark"
-	@echo "cdc-down    Stop the CDC services and leave the Phase 1 containers up"
+	@echo "cdc-down    Remove Kafka, Connect, and the consumers. Postgres and Airflow stay"
+	@echo "            DROP_SLOT=1 also drops saas_app_slot so WAL can be recycled"
+	@echo "cdc-reset  Drop saas_app_slot if Connect is not using it"
 	@echo "cdc-prepare Create the replication role and publication"
 	@echo "cdc-register  Register the Debezium connector"
 	@echo "cdc-lag     Print broker lag and warehouse delay"
@@ -67,7 +69,7 @@ up: warn-airflow-uid
 	docker compose up -d --build
 
 down:
-	docker compose down
+	docker compose down --remove-orphans
 
 logs:
 	docker compose logs -f
@@ -106,7 +108,13 @@ cdc-up-python: warn-airflow-uid
 	$(COMPOSE_CDC) --profile cdc-python up -d --build
 
 cdc-down:
-	$(COMPOSE_CDC) --profile cdc --profile cdc-python stop kafka connect spark-consumer python-consumer
+	$(COMPOSE_CDC) --profile cdc --profile cdc-python down --remove-orphans kafka connect spark-consumer python-consumer
+ifeq ($(DROP_SLOT),1)
+	psql "$(DATABASE_URL)" -v ON_ERROR_STOP=1 -f app_db/cdc/003_drop_slot.sql
+endif
+
+cdc-reset:
+	psql "$(DATABASE_URL)" -v ON_ERROR_STOP=1 -f app_db/cdc/003_drop_slot.sql
 
 cdc-prepare:
 	psql "$(DATABASE_URL)" -v ON_ERROR_STOP=1 -f app_db/cdc/002_cdc.sql

@@ -136,7 +136,7 @@ make down
 
 ## Change data capture
 
-`make cdc-up` recreates Postgres with `wal_level=logical`, `max_wal_senders=4`, and `max_replication_slots=4`. The data volume is kept. Init scripts do not re-run on an existing volume, and they do not create the publication on a fresh one either. That SQL is `app_db/cdc/002_cdc.sql`. It is not mounted into `/docker-entrypoint-initdb.d`, so a plain `make up` never runs it. After `make cdc-up`, apply it yourself. The same two commands work when the volume already has Phase 1 data and when `make cdc-up` created the volume:
+`make up` and `make cdc-up` start the same Postgres settings: `wal_level=logical`, `max_wal_senders=4`, and `max_replication_slots=4`. The data volume is kept. Those settings have to match. Debezium's slot `saas_app_slot` is stored on that volume. If a later start lowered `wal_level`, Postgres would crash-loop with `logical replication slot "saas_app_slot" exists, but wal_level < logical`. Init scripts do not re-run on an existing volume, and they do not create the publication on a fresh one either. That SQL is `app_db/cdc/002_cdc.sql`. It is not mounted into `/docker-entrypoint-initdb.d`, so a plain `make up` never runs it. After `make cdc-up`, apply it yourself. The same two commands work when the volume already has Phase 1 data and when `make cdc-up` created the volume:
 
 ```bash
 make cdc-prepare
@@ -149,7 +149,7 @@ Host tools use `localhost:9094` for Kafka and `http://localhost:8080` for Airflo
 
 `make cdc-up-python` starts the same broker and Connect, and the Python consumer instead of Spark. Do not run both consumers in the `saas-cdc-consumer` group at once.
 
-`make cdc-down` stops Kafka, Connect, and the consumer. `make down` stops Phase 1. Airflow's `saas_cdc_health` DAG only checks connector status and prints lag. It does not run the stream. With Phase 1 alone, `CDC_CONNECT_URL` is unset and that check skips successfully.
+`make cdc-down` removes Kafka, Connect, and the consumer containers and leaves Postgres and Airflow up. `make down` stops Phase 1. Both pass `--remove-orphans`, so a container from the other profile does not keep running. Neither command drops `saas_app_slot`. An unused logical slot retains WAL until a consumer reads it or the slot is dropped, and the data directory grows for as long as that slot exists. `make cdc-reset` drops the slot when Connect is not using it. `make cdc-down DROP_SLOT=1` drops it after the CDC containers are gone. Airflow's `saas_cdc_health` DAG only checks connector status and prints lag. It does not run the stream. With Phase 1 alone, `CDC_CONNECT_URL` is unset and that check skips successfully.
 
 ```bash
 make cdc-lag
