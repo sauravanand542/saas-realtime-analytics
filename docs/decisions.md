@@ -8,6 +8,14 @@ Local development and CI need a warehouse that costs nothing and starts without 
 
 dbt-core is pinned to 1.11 because that is the newest release line that publishes both `dbt-duckdb` and `dbt-snowflake`. A newer core would drop the local adapter.
 
+## One DuckDB writer at a time
+
+The warehouse file allows one writer. A second process that opens it gets `Conflicting lock` and used to die with a traceback, which made `make cdc-lag`, ingest, and dbt unusable for the whole time the consumer process was up.
+
+The Python consumer and the Spark `foreachBatch` handler do not keep a connection across batches. Each batch opens DuckDB, writes, commits, and closes before Kafka offsets are committed. The file lock is only held for that write. `streaming.lag`, ingest, and `scripts/dbt_build.sh` retry with a short backoff (`DUCKDB_LOCK_ATTEMPTS`, `DUCKDB_LOCK_DELAY_SECONDS`) and stop with a short message if the file is still locked. `make cdc-lag` still prints broker lag when the warehouse read gives up. Two long jobs, such as a host `dbt build` and the Airflow dbt task, still cannot overlap: the retry covers a batch, not a whole model build.
+
+Snowflake does not have this limit. Its connections do not take a file lock, so a consumer and a dbt job can run at the same time. The local tradeoff is that a long DuckDB batch blocks every other writer until that batch commits.
+
 ## Batch and CDC side by side
 
 The batch extract is still the backfill and the path CI runs. It writes one current row per key to `raw.<table>` with `_source_system = postgres_batch`. The CDC consumer writes one row per change to `raw.<table>_cdc` with `_source_system = debezium` and the same business columns. Staging unions the batch snapshot with the latest CDC row per key. A newer CDC commit hides the snapshot. A newer snapshot hides older CDC. A winning delete removes the key. Marts still read staging, so they did not have to learn about Kafka.

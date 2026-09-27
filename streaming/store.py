@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from ingest.contract import TABLES, create_table_sql
+from ingest.duckdb_retry import duckdb_session
 from ingest.load_duckdb import duckdb_path
 
 from streaming.messages import CONSUMER_GROUP, SOURCE_SYSTEM, Change, DeadLetter, RawMessage
@@ -126,16 +127,11 @@ def landing_signature(table: str) -> tuple[int, list[tuple[str, str]]]:
     """Row count and (primary key, dedup token) pairs for replay checks."""
     pk = TABLES[table]["pk"]
     path = duckdb_path()
-    import duckdb
-
-    con = duckdb.connect(str(path), read_only=True)
-    try:
+    with duckdb_session(path, read_only=True) as con:
         count = con.execute(f"select count(*) from raw.{table}_cdc").fetchone()[0]
         rows = con.execute(
             f"select {pk}, _dedup_token from raw.{table}_cdc order by 1, 2"
         ).fetchall()
-    finally:
-        con.close()
     return int(count), [(str(pk_value), token) for pk_value, token in rows]
 
 
@@ -148,11 +144,11 @@ def _write_duckdb(
     commit_offsets: bool,
     consumer_group: str,
 ) -> dict[str, int]:
-    import duckdb
-
     loaded_at = datetime.now(UTC).replace(tzinfo=None)
-    con = duckdb.connect(str(duckdb_path()))
-    try:
+    # Open, write, commit, and close inside this batch. The next caller can
+    # take the file as soon as this function returns. Kafka offsets stay
+    # uncommitted until the caller sees that return.
+    with duckdb_session(duckdb_path()) as con:
         for statement in ensure_statements(create_schema=True):
             con.execute(statement)
         _alter_promoted(con)
@@ -166,8 +162,6 @@ def _write_duckdb(
         except Exception:
             con.execute("rollback")
             raise
-    finally:
-        con.close()
     return {
         "inserted": inserted,
         "skipped": skipped,

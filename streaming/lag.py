@@ -17,8 +17,21 @@ from streaming.topics import APP_TOPICS
 
 
 def main() -> None:
-    _print_warehouse()
+    warehouse_failed = False
+    try:
+        _print_warehouse()
+    except Exception as exc:
+        from ingest.duckdb_retry import DuckDBLockTimeout
+
+        if not isinstance(exc, DuckDBLockTimeout):
+            raise
+        print(exc)
+        warehouse_failed = True
+    # Broker lag does not need the warehouse file. Print it even when the
+    # DuckDB read gave up.
     _print_kafka()
+    if warehouse_failed:
+        raise SystemExit(1)
 
 
 def _print_warehouse() -> None:
@@ -32,14 +45,13 @@ def _print_warehouse() -> None:
                 f"from raw.{table}_cdc;"
             )
         return
-    import duckdb
+    from ingest.duckdb_retry import duckdb_session
 
     path = duckdb_path()
     if not path.exists():
         print(f"No DuckDB file at {path}. Nothing to measure yet.")
         return
-    con = duckdb.connect(str(path), read_only=True)
-    try:
+    with duckdb_session(path, read_only=True) as con:
         for table in TABLES:
             found = con.execute(
                 """
@@ -60,8 +72,6 @@ def _print_warehouse() -> None:
             )
             if source_ts is not None and loaded_at is not None:
                 print(f"  loaded_minus_source={loaded_at - source_ts}")
-    finally:
-        con.close()
 
 
 def _print_kafka() -> None:

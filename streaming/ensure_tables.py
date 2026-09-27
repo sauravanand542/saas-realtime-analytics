@@ -24,19 +24,23 @@ def main() -> None:
         print("ensured snowflake raw and cdc tables")
         return
 
-    import duckdb
+    from ingest.duckdb_retry import duckdb_session
     from ingest.load_duckdb import duckdb_path
 
     path = duckdb_path()
-    con = duckdb.connect(str(path))
-    try:
+    with duckdb_session(path) as con:
         for statement in ensure_statements(create_schema=True):
             con.execute(statement)
         _alter_promoted(con)
-    finally:
-        con.close()
     print(f"ensured duckdb raw and cdc tables in {path}")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:
+        from ingest.duckdb_retry import DuckDBLockTimeout
+
+        if isinstance(exc, DuckDBLockTimeout):
+            raise SystemExit(str(exc)) from None
+        raise
