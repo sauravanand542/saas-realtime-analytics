@@ -118,6 +118,10 @@ services:
       - 768m
       - --conf
       - spark.jars.ivy=/opt/spark/ivy
+      - --conf
+      - spark.driver.extraJavaOptions=-Duser.home=/tmp
+      - --conf
+      - spark.executor.extraJavaOptions=-Duser.home=/tmp
       - --packages
       - org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.5
       - /opt/project/streaming/spark_consumer.py

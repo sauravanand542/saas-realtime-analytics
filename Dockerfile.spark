@@ -45,7 +45,7 @@ set -eux
 chmod 755 /opt/spark-entrypoint.sh
 chgrp 0 /etc/passwd
 chmod g=u /etc/passwd
-mkdir -p /opt/spark/work-dir /opt/spark/ivy
+mkdir -p /opt/spark/work-dir /opt/spark/ivy /opt/spark/conf
 chgrp -R 0 /opt/spark/work-dir
 chmod -R g+rwX /opt/spark/work-dir
 touch /opt/spark/conf/spark-defaults.conf
