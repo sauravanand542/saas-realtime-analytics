@@ -31,7 +31,7 @@ observed usage. After `make up` on your machine, record what you actually see:
 
 | Date | Command you used to measure | Postgres | Airflow | Notes |
 | --- | --- | --- | --- | --- |
-| YYYY-MM-DD | _fill in, for example `docker stats`_ | _fill in_ | _fill in_ | |
+| 2026-09-27 | `docker stats --no-stream` (CDC profile running, idle after a tick) | 61.67 MiB / 512 MiB | 1.114 GiB / 1.5 GiB | WSL2 + Docker on a laptop. Airflow is the heaviest service at ~74% of its cap. |
 
 ## CDC profile
 
@@ -49,4 +49,4 @@ After you start a profile, record what `docker stats` actually shows. Also paste
 
 | Date | Profile | Command | Kafka | Connect | Consumer | Lag you observed | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| YYYY-MM-DD | _fill in_ | _fill in_ | _fill in_ | _fill in_ | _fill in_ | _fill in_ | |
+| 2026-09-27 | Python consumer (`make cdc-up-python`) | `docker stats --no-stream`, `make tick` then `make cdc-lag` | 371.2 MiB / 768 MiB | 767.7 MiB / 1 GiB | 49.41 MiB / 384 MiB | 0.6–1.3 s Postgres commit to DuckDB write; Kafka consumer lag 0 on all 6 topics | One small tick (~100 changed rows). CPU under 3% per container when idle. Spark consumer not measured yet. |
