@@ -24,7 +24,7 @@ COMPOSE_CDC := docker compose -f docker-compose.yml -f docker-compose.cdc.yml
 
 .PHONY: help up down logs seed tick ingest dbt-build dbt-docs test break-it heal lint tf-fmt tf-validate \
 	cdc-up cdc-up-python cdc-down cdc-prepare cdc-register cdc-lag \
-	cdc-replay cdc-schema-change cdc-crash cdc-poison consumer-test
+	cdc-replay cdc-schema-change cdc-crash cdc-poison consumer-test require-python
 
 help:
 	@echo "up          Start Postgres and Airflow"
@@ -53,6 +53,9 @@ help:
 	@echo "cdc-poison  Show a bad message on the dead-letter path"
 	@echo "consumer-test  Unit tests for dedup, replay, crash, poison, schema"
 
+require-python:
+	@./scripts/require_python.sh
+
 up:
 	docker compose up -d --build
 
@@ -62,27 +65,27 @@ down:
 logs:
 	docker compose logs -f
 
-seed:
+seed: require-python
 	python -m generator --mode seed --seed $${SEED:-42}
 
-tick:
+tick: require-python
 	python -m generator --mode tick
 
-ingest:
+ingest: require-python
 	python -m ingest --target $(WAREHOUSE_TARGET)
 
-dbt-build:
-	./scripts/dbt_build.sh
+dbt-build: require-python
+	PIPELINE_PYTHON="$${PIPELINE_PYTHON:-python}" ./scripts/dbt_build.sh
 
 dbt-docs:
 	cd transform && dbt docs generate --target $(WAREHOUSE_TARGET) && dbt docs serve --target $(WAREHOUSE_TARGET)
 
 test: dbt-build
 
-break-it:
+break-it: require-python
 	python -m scripts.break_it
 
-heal:
+heal: require-python
 	python -m scripts.heal_it
 
 lint:
@@ -101,25 +104,25 @@ cdc-down:
 cdc-prepare:
 	psql "$(DATABASE_URL)" -v ON_ERROR_STOP=1 -f app_db/cdc/002_cdc.sql
 
-cdc-register:
+cdc-register: require-python
 	CDC_CONNECT_URL=$${CDC_CONNECT_URL:-http://localhost:8083} python -m streaming.register_connector
 
-cdc-lag:
+cdc-lag: require-python
 	python -m streaming.lag
 
-cdc-replay:
+cdc-replay: require-python
 	python -m streaming.demos replay $(if $(LIVE),--live,)
 
-cdc-schema-change:
+cdc-schema-change: require-python
 	python -m streaming.demos schema $(if $(LIVE),--live,)
 
-cdc-crash:
+cdc-crash: require-python
 	python -m streaming.demos crash $(if $(LIVE),--live,)
 
-cdc-poison:
+cdc-poison: require-python
 	python -m streaming.demos poison $(if $(LIVE),--live,)
 
-consumer-test:
+consumer-test: require-python
 	python -m pytest streaming/tests -q
 
 tf-fmt:
