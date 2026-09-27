@@ -126,7 +126,7 @@ Spark is the default consumer because the interesting streaming behavior (micro-
 
 `foreachBatch` collects the micro-batch in the driver. That is acceptable for this volume. A larger feed would write from the executors. The dedup rule would not change.
 
-The Spark image is `apache/spark:3.5.5` plus a Python 3.12 venv. The base image's `python3` is too old for the `duckdb` wheel, so `PYSPARK_PYTHON` and `PYSPARK_DRIVER_PYTHON` point at `/opt/py/bin/python`. That venv installs `requirements-runtime.txt`, the same pins the host and the Python consumer use. The Kafka package stays `spark-sql-kafka-0-10_2.12:3.5.5`. Unit tests still do not download Spark. CI builds both consumer images.
+The Spark image is `apache/spark:3.5.5` plus Python 3.12 from the deadsnakes archive. Focal has no `python3.12-venv` package, so pip is installed with `get-pip.py`. The base image's `python3` is too old for the `duckdb` wheel, so `PYSPARK_PYTHON` and `PYSPARK_DRIVER_PYTHON` point at `/usr/bin/python3.12`. That interpreter installs `requirements-runtime.txt`, the same pins the host and the Python consumer use. The Kafka package stays `spark-sql-kafka-0-10_2.12:3.5.5`. Unit tests still do not download Spark. CI builds both consumer images.
 
 ## Deletes are soft in the change log
 
