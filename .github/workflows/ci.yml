@@ -95,3 +95,60 @@ jobs:
         run: |
           terraform init -backend=false
           terraform validate
+
+  compose-postgres:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Postgres client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Start Phase 1 Postgres from the compose file
+        run: |
+          set -euxo pipefail
+          if ! docker compose up -d --wait --wait-timeout 120 postgres; then
+            docker compose logs postgres
+            docker inspect saas-analytics-postgres-1 || true
+            exit 1
+          fi
+      - name: App schema and Airflow database exist
+        run: |
+          set -euxo pipefail
+          docker compose exec -T postgres psql -U app -d app -v ON_ERROR_STOP=1 -c '\dt app.*'
+          tables=$(docker compose exec -T postgres psql -U app -d app -v ON_ERROR_STOP=1 -tA -c \
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'app' ORDER BY 1")
+          expected=$(printf '%s\n' invoices logins organizations subscription_events subscriptions users)
+          if [ "$tables" != "$expected" ]; then
+            echo "unexpected app tables:"
+            printf '%s\n' "$tables"
+            exit 1
+          fi
+          docker compose exec -T postgres psql -U app -d postgres -v ON_ERROR_STOP=1 -tA -c \
+            "SELECT 1 FROM pg_database WHERE datname = 'airflow'" | grep -qx 1
+          docker compose exec -T postgres psql -U app -d app -v ON_ERROR_STOP=1 -tA -c \
+            "SELECT count(*) FROM pg_publication WHERE pubname = 'app_publication'" | grep -qx 0
+      - name: cdc-prepare on the existing Phase 1 volume
+        run: |
+          set -euxo pipefail
+          if ! docker compose -f docker-compose.yml -f docker-compose.cdc.yml up -d --wait --wait-timeout 120 postgres; then
+            docker compose logs postgres
+            exit 1
+          fi
+          make cdc-prepare
+          make cdc-prepare
+          docker compose exec -T postgres psql -U app -d app -v ON_ERROR_STOP=1 -tA -c \
+            "SELECT rolname FROM pg_roles WHERE rolname = 'replicator'" | grep -qx replicator
+          docker compose exec -T postgres psql -U app -d app -v ON_ERROR_STOP=1 -tA -c \
+            "SELECT pubname FROM pg_publication WHERE pubname = 'app_publication'" | grep -qx app_publication
+      - name: cdc-prepare on a fresh CDC volume
+        run: |
+          set -euxo pipefail
+          docker compose -f docker-compose.yml -f docker-compose.cdc.yml down -v
+          if ! docker compose -f docker-compose.yml -f docker-compose.cdc.yml up -d --wait --wait-timeout 120 postgres; then
+            docker compose -f docker-compose.yml -f docker-compose.cdc.yml logs postgres
+            exit 1
+          fi
+          make cdc-prepare
+          make cdc-prepare
+          docker compose exec -T postgres psql -U app -d app -v ON_ERROR_STOP=1 -tA -c \
+            "SELECT pubname FROM pg_publication WHERE pubname = 'app_publication'" | grep -qx app_publication
+          docker compose -f docker-compose.yml -f docker-compose.cdc.yml down -v
