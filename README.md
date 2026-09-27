@@ -78,7 +78,17 @@ Marts:
 
 ## Requirements
 
-Python 3.11 or 3.12 is enough. CI uses 3.12. dbt is pinned to 1.11 because that is the newest line that publishes both `dbt-duckdb` and `dbt-snowflake`.
+Python 3.11 or 3.12. CI uses 3.12. dbt is pinned to 1.11 because that is the newest line that publishes both `dbt-duckdb` and `dbt-snowflake`. `make cdc-prepare` runs `psql`, so install `postgresql-client` as well.
+
+Ubuntu 22.04's `python3` is 3.10. The generator imports `datetime.UTC`, which that version does not have, and `make seed` stops with `ImportError: cannot import name 'UTC' from 'datetime'`. Install 3.11 and create the venv with it:
+
+```bash
+sudo apt install python3.11 python3.11-venv python3.11-dev postgresql-client
+python3.11 -m venv .venv
+source .venv/bin/activate
+```
+
+On a newer distro where `python3` is already 3.11 or 3.12, `python3 -m venv .venv` is enough. Activate the venv before the host `make` targets. Those targets call `python`, and they refuse to start a module when that interpreter is older than 3.11.
 
 ## Run it on WSL2
 
@@ -90,10 +100,9 @@ Use Ubuntu on WSL2 with Docker Engine installed inside the distro, or Docker Des
 | CDC with Spark | `make cdc-up` | Phase 1 caps, plus Kafka 768 MB, Connect 1024 MB, Spark 1536 MB |
 | CDC with Python | `make cdc-up-python` | Phase 1 caps, plus Kafka 768 MB, Connect 1024 MB, Python consumer 384 MB |
 
-From the repo root:
+From the repo root, with the venv from Requirements already created:
 
 ```bash
-python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements-dev.txt
 
