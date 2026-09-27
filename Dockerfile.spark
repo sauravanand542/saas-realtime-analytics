@@ -25,7 +25,13 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*; \
     /opt/py/bin/python -c 'import sys; assert sys.version_info[:2]==(3,12)'; \
     /opt/py/bin/python -m pip install --no-cache-dir -r /tmp/requirements-runtime.txt; \
-    chmod -R a+rX /opt/py
+    py4j=$(find /opt/spark/python/lib -name 'py4j-*-src.zip' -print -quit); \
+    test -n "$py4j"; \
+    test -f "$py4j"; \
+    site=$(/opt/py/bin/python -c 'import site; print(site.getsitepackages()[0])'); \
+    printf '%s\n%s\n' /opt/spark/python "$py4j" > "${site}/spark.pth"; \
+    chmod -R a+rX /opt/py /opt/spark/python; \
+    /opt/py/bin/python -c 'import pyspark, duckdb; assert pyspark.__version__.startswith("3.5.")'
 
 # Compose runs this image as ${AIRFLOW_UID}:0. The entrypoint adds that uid to
 # /etc/passwd, and local spark-submit writes under the work dir and $HOME.
