@@ -4,7 +4,9 @@
 set -euo pipefail
 
 if [[ -n "${CDC_CONNECT_URL:-}" ]]; then
-  if command -v python3 >/dev/null 2>&1; then
+  if [[ -n "${PYSPARK_PYTHON:-}" ]]; then
+    PY="${PYSPARK_PYTHON}"
+  elif command -v python3 >/dev/null 2>&1; then
     PY=python3
   else
     PY=python

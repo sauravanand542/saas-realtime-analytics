@@ -114,9 +114,11 @@ Spark Structured Streaming uses the same function inside `foreachBatch`. The che
 
 ## Spark by default, Python when the laptop is tight
 
-Spark is the default consumer because the interesting streaming behavior (micro-batches, a checkpoint, replay from that checkpoint) is what the Spark background is for. A local `local[1]` driver is still a JVM. The Python consumer calls the same parse and merge code and is the process to run when the extra heap is not available (`make cdc-up-python`). Unit tests exercise that shared code with fixture envelopes and never start a broker. CI does not download Spark.
+Spark is the default consumer because the interesting streaming behavior (micro-batches, a checkpoint, replay from that checkpoint) is what the Spark background is for. A local `local[1]` driver is still a JVM. The Python consumer calls the same parse and merge code and is the process to run when the extra heap is not available (`make cdc-up-python`). Unit tests exercise that shared code with fixture envelopes and never start a broker.
 
 `foreachBatch` collects the micro-batch in the driver. That is acceptable for this volume. A larger feed would write from the executors. The dedup rule would not change.
+
+The Spark image is `apache/spark:3.5.5` plus a Python 3.12 venv. The base image's `python3` is too old for the `duckdb` wheel, so `PYSPARK_PYTHON` and `PYSPARK_DRIVER_PYTHON` point at `/opt/py/bin/python`. That venv installs `requirements-runtime.txt`, the same pins the host and the Python consumer use. The Kafka package stays `spark-sql-kafka-0-10_2.12:3.5.5`. Unit tests still do not download Spark. CI builds both consumer images.
 
 ## Deletes are soft in the change log
 

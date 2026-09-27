@@ -1,9 +1,29 @@
+# apache/spark:3.5.5 keeps Spark 3.5.x and the Kafka connector package.
+# Its python3 is Ubuntu's (3.8 on focal). duckdb 1.5.5 publishes no wheel
+# for that interpreter, so pip reports nothing newer than 1.3.2.
+# Python 3.12 matches the rest of the repo. PySpark is pointed at it.
 FROM apache/spark:3.5.5
 
 USER root
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3-pip \
-    && python3 -m pip install --no-cache-dir duckdb==1.5.5 snowflake-connector-python==4.7.5 \
-    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements-runtime.txt /tmp/requirements-runtime.txt
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ca-certificates curl gnupg; \
+    install -d -m 0755 /usr/share/keyrings; \
+    curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xF23C5A6CF475977595C89F51BA6932366A755776" \
+      | gpg --dearmor -o /usr/share/keyrings/deadsnakes.gpg; \
+    . /etc/os-release; \
+    echo "deb [signed-by=/usr/share/keyrings/deadsnakes.gpg] https://ppa.launchpadcontent.net/deadsnakes/ppa/ubuntu ${VERSION_CODENAME} main" \
+      > /etc/apt/sources.list.d/deadsnakes.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends python3.12 python3.12-venv; \
+    python3.12 -m venv /opt/py; \
+    /opt/py/bin/pip install --no-cache-dir -r /tmp/requirements-runtime.txt; \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /opt/project
-ENV PYTHONPATH=/opt/project
+ENV PYTHONPATH=/opt/project \
+    PYSPARK_PYTHON=/opt/py/bin/python \
+    PYSPARK_DRIVER_PYTHON=/opt/py/bin/python

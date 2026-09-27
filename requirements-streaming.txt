@@ -1,4 +1,4 @@
 # Extra dependency for the lightweight consumer. The Spark container provides pyspark.
+# duckdb and the Snowflake connector are pinned in requirements-runtime.txt.
+-r requirements-runtime.txt
 kafka-python==2.2.15
-duckdb==1.5.5
-snowflake-connector-python==4.7.5
