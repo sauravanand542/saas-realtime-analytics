@@ -1,28 +1,31 @@
 # apache/spark:3.5.5 keeps Spark 3.5.x and the Kafka connector package.
 # Its python3 is Ubuntu's (3.8 on focal). duckdb 1.5.5 publishes no wheel
-# for that interpreter, so pip reports nothing newer than 1.3.2.
-# Python 3.12 matches the rest of the repo. Focal has no python3.12-venv
-# package, so pip comes from get-pip.py. PySpark is pointed at python3.12.
+# for that interpreter. Deadsnakes no longer publishes Python 3.12 for focal,
+# and apt then treats the package name as a regex and installs PostgreSQL
+# instead. Python 3.12 is a pinned python-build-standalone build at /opt/py.
 FROM apache/spark:3.5.5
 
 USER root
 
 COPY requirements-runtime.txt /tmp/requirements-runtime.txt
 
+# cpython 3.12.14, release 20260924, x86_64 glibc install_only.
+# https://github.com/astral-sh/python-build-standalone/releases/tag/20260924
+ARG PYTHON_STANDALONE_URL=https://github.com/astral-sh/python-build-standalone/releases/download/20260924/cpython-3.12.14%2B20260924-x86_64-unknown-linux-gnu-install_only.tar.gz
+ARG PYTHON_STANDALONE_SHA256=5eae8cf79dd47fc2496a4fccc892936be831ce7a84d984b2299dfb1cdb592682
+
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends ca-certificates curl gnupg; \
-    install -d -m 0755 /usr/share/keyrings; \
-    curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xF23C5A6CF475977595C89F51BA6932366A755776" \
-      | gpg --dearmor -o /usr/share/keyrings/deadsnakes.gpg; \
-    . /etc/os-release; \
-    echo "deb [signed-by=/usr/share/keyrings/deadsnakes.gpg] https://ppa.launchpadcontent.net/deadsnakes/ppa/ubuntu ${VERSION_CODENAME} main" \
-      > /etc/apt/sources.list.d/deadsnakes.list; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends python3.12; \
-    curl -fsSL https://bootstrap.pypa.io/get-pip.py | python3.12; \
-    python3.12 -m pip install --no-cache-dir -r /tmp/requirements-runtime.txt; \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends ca-certificates curl; \
+    curl -fsSL -o /tmp/python.tgz "${PYTHON_STANDALONE_URL}"; \
+    echo "${PYTHON_STANDALONE_SHA256}  /tmp/python.tgz" | sha256sum -c -; \
+    mkdir -p /opt/py; \
+    tar -xzf /tmp/python.tgz -C /opt/py --strip-components=1; \
+    rm -f /tmp/python.tgz; \
+    rm -rf /var/lib/apt/lists/*; \
+    /opt/py/bin/python -c 'import sys; assert sys.version_info[:2]==(3,12)'; \
+    /opt/py/bin/python -m pip install --no-cache-dir -r /tmp/requirements-runtime.txt; \
+    chmod -R a+rX /opt/py
 
 # Compose runs this image as ${AIRFLOW_UID}:0. The entrypoint adds that uid to
 # /etc/passwd, and local spark-submit writes under the work dir and $HOME.
@@ -34,5 +37,6 @@ RUN chmod g=u /etc/passwd \
 WORKDIR /opt/project
 ENV PYTHONPATH=/opt/project \
     HOME=/tmp \
-    PYSPARK_PYTHON=/usr/bin/python3.12 \
-    PYSPARK_DRIVER_PYTHON=/usr/bin/python3.12
+    PATH="/opt/py/bin:${PATH}" \
+    PYSPARK_PYTHON=/opt/py/bin/python \
+    PYSPARK_DRIVER_PYTHON=/opt/py/bin/python

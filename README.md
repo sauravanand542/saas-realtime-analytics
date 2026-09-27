@@ -143,7 +143,7 @@ make cdc-prepare
 make cdc-register
 ```
 
-`cdc-prepare` creates the `replicator` role and the `app_publication` publication for the six app tables. It fails with a clear error if `wal_level` is not `logical`. `cdc-register` tells Kafka Connect to start the `saas-app` connector (`pgoutput`, slot `saas_app_slot`). The Spark consumer waits until that connector is `RUNNING`, then reads `saas.app.*`. That image is Spark 3.5.5 with Python 3.12 (`PYSPARK_PYTHON=/usr/bin/python3.12`). The base image's `python3` cannot install `duckdb==1.5.5`. The Python consumer image is already Python 3.12. Connect is Java. Both consumers install `requirements-runtime.txt`.
+`cdc-prepare` creates the `replicator` role and the `app_publication` publication for the six app tables. It fails with a clear error if `wal_level` is not `logical`. `cdc-register` tells Kafka Connect to start the `saas-app` connector (`pgoutput`, slot `saas_app_slot`). The Spark consumer waits until that connector is `RUNNING`, then reads `saas.app.*`. That image is Spark 3.5.5 with Python 3.12 from a pinned standalone build (`PYSPARK_PYTHON=/opt/py/bin/python`). The base image's `python3` cannot install `duckdb==1.5.5`, and Ubuntu 20.04 no longer has a Python 3.12 package. The Python consumer image is already Python 3.12. Connect is Java. Both consumers install `requirements-runtime.txt`.
 
 Host tools use `localhost:9094` for Kafka and `http://localhost:8080` for Airflow. Connect's REST API is on port 8083. `requirements-dev.txt` installs `kafka-python` (pinned in `requirements-streaming.txt`). Set `KAFKA_BOOTSTRAP_SERVERS=localhost:9094` in `.env` for `make cdc-lag` and for the Python consumer on the host.
 
