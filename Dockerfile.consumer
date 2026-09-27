@@ -1,6 +1,8 @@
+# Python 3.12, same interpreter the pins in requirements-runtime.txt are built for.
+# The Spark base image is separate: its python3 cannot install those wheels.
 FROM python:3.12-slim
 
-COPY requirements-streaming.txt /tmp/requirements-streaming.txt
+COPY requirements-streaming.txt requirements-runtime.txt /tmp/
 RUN pip install --no-cache-dir -r /tmp/requirements-streaming.txt
 WORKDIR /opt/project
 ENV PYTHONPATH=/opt/project

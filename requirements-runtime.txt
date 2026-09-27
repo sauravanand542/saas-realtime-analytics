@@ -1,0 +1,5 @@
+# DuckDB and the Snowflake connector. Host installs, the Python consumer,
+# and the Spark image all include this file so the pins cannot drift.
+# The Spark base image's python3 is too old for these wheels.
+duckdb==1.5.5
+snowflake-connector-python==4.7.5
