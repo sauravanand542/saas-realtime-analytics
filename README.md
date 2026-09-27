@@ -142,7 +142,7 @@ make cdc-register
 
 `cdc-prepare` creates the `replicator` role and the `app_publication` publication for the six app tables. It fails with a clear error if `wal_level` is not `logical`. `cdc-register` tells Kafka Connect to start the `saas-app` connector (`pgoutput`, slot `saas_app_slot`). The Spark consumer waits until that connector is `RUNNING`, then reads `saas.app.*`. That image is Spark 3.5.5 with Python 3.12 (`PYSPARK_PYTHON=/usr/bin/python3.12`). The base image's `python3` cannot install `duckdb==1.5.5`. The Python consumer image is already Python 3.12. Connect is Java. Both consumers install `requirements-runtime.txt`.
 
-Host tools use `localhost:9094` for Kafka and `http://localhost:8080` for Airflow. Connect's REST API is on port 8083. Set `KAFKA_BOOTSTRAP_SERVERS=localhost:9094` in `.env` when you run the Python consumer on the host.
+Host tools use `localhost:9094` for Kafka and `http://localhost:8080` for Airflow. Connect's REST API is on port 8083. `requirements-dev.txt` installs `kafka-python` (pinned in `requirements-streaming.txt`). Set `KAFKA_BOOTSTRAP_SERVERS=localhost:9094` in `.env` for `make cdc-lag` and for the Python consumer on the host.
 
 `make cdc-up-python` starts the same broker and Connect, and the Python consumer instead of Spark. Do not run both consumers in the `saas-cdc-consumer` group at once.
 

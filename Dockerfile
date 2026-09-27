@@ -1,7 +1,7 @@
 FROM apache/airflow:2.10.5-python3.11
 
 USER root
-COPY requirements.txt requirements-runtime.txt /tmp/
+COPY requirements.txt requirements-streaming.txt requirements-runtime.txt /tmp/
 RUN python -m venv /opt/pipeline-venv \
     && /opt/pipeline-venv/bin/pip install --upgrade pip \
     && /opt/pipeline-venv/bin/pip install --no-cache-dir -r /tmp/requirements.txt \

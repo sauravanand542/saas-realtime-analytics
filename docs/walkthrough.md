@@ -109,7 +109,7 @@ The consumer reads topics `saas.app.<table>`. `streaming/messages.py` turns an e
 
 `airflow/dags/saas_cdc_health.py` is the observer. Trigger it after the connector is up. With only `make up`, the task logs that `CDC_CONNECT_URL` is unset and succeeds.
 
-`python -m streaming.lag` prints, per table, the row count, `max(_source_ts)`, and `max(_loaded_at)`, and the difference when both exist. If `KAFKA_BOOTSTRAP_SERVERS` is set and `kafka-python` is installed, it also prints committed offset, end offset, and lag. Copy those figures into `docs/cost.md` when you want a record. The repo does not ship a target lag.
+`python -m streaming.lag` prints, per table, the row count, `max(_source_ts)`, and `max(_loaded_at)`, and the difference when both exist. With `KAFKA_BOOTSTRAP_SERVERS=localhost:9094` it also prints committed offset, end offset, and lag. The host install (`requirements-dev.txt`) includes `kafka-python` for that query. Copy those figures into `docs/cost.md` when you want a record. The repo does not ship a target lag.
 
 ## Failure demos for the stream
 
