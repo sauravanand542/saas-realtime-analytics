@@ -44,6 +44,8 @@ services:
     # Match the checkout owner. The image default (uid 50000) cannot write a
     # bind-mounted warehouse file or dbt target/ and logs/ created on the host.
     # Group 0 is required by the Airflow entrypoint. Empty AIRFLOW_UID uses 50000.
+    # That entrypoint adds the uid to /etc/passwd and sets HOME to /home/airflow.
+    # Do not set HOME=/tmp here. The Airflow install lives under that home.
     user: "${AIRFLOW_UID:-50000}:0"
     depends_on:
       postgres:

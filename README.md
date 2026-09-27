@@ -143,7 +143,7 @@ make cdc-prepare
 make cdc-register
 ```
 
-`cdc-prepare` creates the `replicator` role and the `app_publication` publication for the six app tables. It fails with a clear error if `wal_level` is not `logical`. `cdc-register` tells Kafka Connect to start the `saas-app` connector (`pgoutput`, slot `saas_app_slot`). The Spark consumer waits until that connector is `RUNNING`, then reads `saas.app.*`. That image is Spark 3.5.5 with Python 3.12 from a pinned standalone build (`PYSPARK_PYTHON=/opt/py/bin/python`). The base image's `python3` cannot install `duckdb==1.5.5`, and Ubuntu 20.04 no longer has a Python 3.12 package. The Python consumer image is already Python 3.12. Connect is Java. Both consumers install `requirements-runtime.txt`.
+`cdc-prepare` creates the `replicator` role and the `app_publication` publication for the six app tables. It fails with a clear error if `wal_level` is not `logical`. `cdc-register` tells Kafka Connect to start the `saas-app` connector (`pgoutput`, slot `saas_app_slot`). The Spark consumer waits until that connector is `RUNNING`, then reads `saas.app.*`. That image is Spark 3.5.5 with Python 3.12 from a pinned standalone build (`PYSPARK_PYTHON=/opt/py/bin/python`). The base image's `python3` cannot install `duckdb==1.5.5`, and Ubuntu 20.04 no longer has a Python 3.12 package. If `spark-submit` dies with `?/.ivy2`, see Troubleshooting. The Python consumer image is already Python 3.12. Connect is Java. Both consumers install `requirements-runtime.txt`.
 
 Host tools use `localhost:9094` for Kafka and `http://localhost:8080` for Airflow. Connect's REST API is on port 8083. `requirements-dev.txt` installs `kafka-python` (pinned in `requirements-streaming.txt`). Set `KAFKA_BOOTSTRAP_SERVERS=localhost:9094` in `.env` for `make cdc-lag` and for the Python consumer on the host.
 
@@ -161,6 +161,25 @@ make consumer-test
 ```
 
 The four demo targets run against a temporary DuckDB file, so they do not need Kafka and they do not touch `warehouse/analytics.duckdb`. `LIVE=1` adds a broker reachability check when you have the profile up. What each demo proves is in `docs/walkthrough.md`.
+
+## Troubleshooting
+
+### Spark: `basedir must be absolute: ?/.ivy2/local`
+
+`make cdc-up` runs the Spark consumer as `AIRFLOW_UID`, group 0. That uid is not the `spark` user in the image. Java sets `user.home` from `/etc/passwd`, not from the `HOME` environment variable. With no entry, the path is `?`, and `spark-submit --packages` crashes in Ivy before it talks to Kafka. Debezium can still be `RUNNING`.
+
+The image makes `/etc/passwd` writable by group 0, and the Spark entrypoint adds the uid with home `/tmp`. `chmod g=u` is not enough on its own: the file's group has to be 0 or that write bit does not apply. `HOME` and `SPARK_SUBMIT_OPTS=-Duser.home=/tmp` are set as well. `spark.jars.ivy` is `/opt/spark/ivy`, and the Kafka connector jars are downloaded into that directory when the image is built, so a later start does not fetch them again.
+
+The Python consumer uses the same passwd line and `HOME=/tmp`. `pathlib.Path.home()` reads passwd, so `HOME` alone does not fix it either. Airflow's own entrypoint adds the uid and points its home at `/home/airflow`, which that image already makes writable by group 0.
+
+If the Ivy error is still in the Spark logs, check the running user and the passwd line:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.cdc.yml --profile cdc exec spark-consumer id
+docker compose -f docker-compose.yml -f docker-compose.cdc.yml --profile cdc exec spark-consumer getent passwd "$(id -u)"
+```
+
+The uid should match `AIRFLOW_UID`, the group should be 0, and the home field should be `/tmp`.
 
 ## Failure demo
 

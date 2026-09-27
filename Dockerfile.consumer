@@ -3,7 +3,10 @@
 FROM python:3.12-slim
 
 COPY requirements-streaming.txt requirements-runtime.txt /tmp/
+# Group 0 must own the write bit. chmod g=u does not change the group, and
+# Python's Path.home() reads passwd, not HOME. scripts/run_consumer.sh adds the uid.
 RUN pip install --no-cache-dir -r /tmp/requirements-streaming.txt \
+    && chgrp 0 /etc/passwd \
     && chmod g=u /etc/passwd
 WORKDIR /opt/project
 ENV PYTHONPATH=/opt/project \
