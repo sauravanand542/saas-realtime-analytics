@@ -83,8 +83,8 @@ services:
       dockerfile: Dockerfile.spark
     profiles: ["cdc"]
     user: "${AIRFLOW_UID:-50000}:0"
-    # The Spark entrypoint writes java_opts.txt in the work dir, and Ivy uses $HOME.
-    # /tmp is writable for any uid. The project stays on PYTHONPATH and the bind mount.
+    # The entrypoint writes java_opts.txt in the work dir. Java's user.home comes
+    # from passwd (home /tmp), not from HOME. Ivy is pinned so it never uses ?/.ivy2.
     working_dir: /tmp
     depends_on:
       kafka:
@@ -97,6 +97,7 @@ services:
       DUCKDB_PATH: /opt/project/warehouse/analytics.duckdb
       CDC_CHECKPOINT: /opt/project/warehouse/cdc_checkpoints
       PYTHONPATH: /opt/project
+      SPARK_SUBMIT_OPTS: "-Duser.home=/tmp"
       SNOWFLAKE_ACCOUNT: ${SNOWFLAKE_ACCOUNT:-}
       SNOWFLAKE_USER: ${SNOWFLAKE_USER:-}
       SNOWFLAKE_PASSWORD: ${SNOWFLAKE_PASSWORD:-}
@@ -115,6 +116,8 @@ services:
       - local[1]
       - --driver-memory
       - 768m
+      - --conf
+      - spark.jars.ivy=/opt/spark/ivy
       - --packages
       - org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.5
       - /opt/project/streaming/spark_consumer.py

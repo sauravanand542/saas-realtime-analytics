@@ -33,16 +33,71 @@ RUN set -eux; \
     chmod -R a+rX /opt/py /opt/spark/python; \
     /opt/py/bin/python -c 'import pyspark, duckdb; assert pyspark.__version__.startswith("3.5.")'
 
-# Compose runs this image as ${AIRFLOW_UID}:0. The entrypoint adds that uid to
-# /etc/passwd, and local spark-submit writes under the work dir and $HOME.
-RUN chmod g=u /etc/passwd \
-    && mkdir -p /opt/spark/work-dir \
-    && chgrp -R 0 /opt/spark/work-dir \
-    && chmod -R g+rwX /opt/spark/work-dir
+# Compose runs this image as ${AIRFLOW_UID}:0. Java reads user.home from
+# passwd, not from HOME. With no entry that path is "?", and Ivy then crashes
+# on ?/.ivy2. Group 0 must own the write bit; chmod g=u alone does not change
+# the file's group. The entrypoint records the uid with home /tmp.
+# Kafka jars are resolved once here so spark-submit does not download them.
+RUN <<'EOF'
+set -eux
+sed -i 's#${SPARK_USER_NAME:-anonymous uid}:$SPARK_HOME:/bin/false#${SPARK_USER_NAME:-anonymous}:/tmp:/bin/false#' /opt/entrypoint.sh
+grep -q ':/tmp:/bin/false' /opt/entrypoint.sh
+chgrp 0 /etc/passwd
+chmod g=u /etc/passwd
+mkdir -p /opt/spark/work-dir /opt/spark/ivy
+chgrp -R 0 /opt/spark/work-dir
+chmod -R g+rwX /opt/spark/work-dir
+touch /opt/spark/conf/spark-defaults.conf
+grep -q '^spark.jars.ivy ' /opt/spark/conf/spark-defaults.conf || printf '%s\n' 'spark.jars.ivy /opt/spark/ivy' >> /opt/spark/conf/spark-defaults.conf
+cat > /tmp/resolve_kafka.py << 'PY'
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.master("local[1]").config("spark.ui.enabled", "false").getOrCreate()
+print(spark.version)
+spark.stop()
+PY
+HOME=/tmp /opt/spark/bin/spark-submit \
+  --master local[1] \
+  --driver-memory 512m \
+  --conf spark.ui.enabled=false \
+  --conf spark.jars.ivy=/opt/spark/ivy \
+  --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.5 \
+  /tmp/resolve_kafka.py
+find /opt/spark/ivy -name 'spark-sql-kafka*.jar' | grep -q .
+chgrp -R 0 /opt/spark/ivy
+chmod -R g+rwX /opt/spark/ivy
+rm -f /tmp/resolve_kafka.py
+/opt/py/bin/python - << 'PY'
+import os, pathlib, pwd, sys
+pid = os.fork()
+if pid == 0:
+    os.setgid(0)
+    os.setuid(1001)
+    if not os.access("/etc/passwd", os.W_OK):
+        os._exit(2)
+    with open("/etc/passwd", "a", encoding="utf-8") as fh:
+        fh.write("1001:x:1001:0:spark:/tmp:/bin/false\n")
+    os._exit(0)
+_, status = os.waitpid(pid, 0)
+if os.waitstatus_to_exitcode(status) != 0:
+    sys.exit("uid 1001 gid 0 could not write /etc/passwd")
+if pwd.getpwuid(1001).pw_dir != "/tmp":
+    sys.exit("passwd home was not /tmp")
+path = pathlib.Path("/etc/passwd")
+path.write_text(
+    "".join(
+        line
+        for line in path.read_text(encoding="utf-8").splitlines(keepends=True)
+        if not line.startswith("1001:")
+    ),
+    encoding="utf-8",
+)
+PY
+EOF
 
 WORKDIR /opt/project
 ENV PYTHONPATH=/opt/project \
     HOME=/tmp \
+    SPARK_SUBMIT_OPTS="-Duser.home=/tmp" \
     PATH="/opt/py/bin:${PATH}" \
     PYSPARK_PYTHON=/opt/py/bin/python \
     PYSPARK_DRIVER_PYTHON=/opt/py/bin/python

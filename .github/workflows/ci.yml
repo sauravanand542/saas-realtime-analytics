@@ -201,6 +201,33 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.cdc.yml --profile cdc-python run --no-deps --rm \
             --entrypoint python python-consumer -c \
             'import duckdb, kafka, streaming; print(duckdb.__version__)'
+      - name: Spark submit starts as a non-default uid
+        run: |
+          set -euxo pipefail
+          docker compose -f docker-compose.yml -f docker-compose.cdc.yml --profile cdc run --no-deps --rm \
+            --user 1001:0 \
+            spark-consumer \
+            bash -lc 'set -euo pipefail
+              getent passwd "$(id -u)"
+              getent passwd "$(id -u)" | grep -q ":/tmp:"
+              test "$(id -u)" = 1001
+              test "$(id -g)" = 0
+              test -w /etc/passwd
+              /opt/spark/bin/spark-submit \
+                --master local[1] \
+                --conf spark.ui.enabled=false \
+                --conf spark.jars.ivy=/opt/spark/ivy \
+                --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.5 \
+                /opt/project/scripts/spark_session_check.py'
+      - name: Python consumer home works as a non-default uid
+        run: |
+          set -euxo pipefail
+          docker compose -f docker-compose.yml -f docker-compose.cdc.yml --profile cdc-python run --no-deps --rm \
+            --user 1001:0 \
+            -e CDC_CONNECT_URL= \
+            python-consumer \
+            bash /opt/project/scripts/run_consumer.sh \
+            python -c 'import os, pathlib; assert os.environ["HOME"] == "/tmp"; assert pathlib.Path.home() == pathlib.Path("/tmp"); print("PYTHON_HOME_OK")'
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
