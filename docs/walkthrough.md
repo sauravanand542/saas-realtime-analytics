@@ -14,6 +14,8 @@ Things that are deliberate:
 
 `000_airflow.sh` creates the Airflow metadata role and database on first Docker init. It is shell because `CREATE DATABASE` cannot run inside the entrypoint's SQL transaction.
 
+`app_db/cdc/002_cdc.sql` is not in this directory. The entrypoint runs every file in `app_db/init`, and that script raises unless `wal_level` is `logical`. Phase 1 Postgres is not. `make cdc-prepare` applies it after `docker-compose.cdc.yml` has restarted Postgres.
+
 ## 2. Generator
 
 `python -m generator --mode seed --seed 42` truncates `app` and writes a history. The same seed produces the same rows. `make tick` adds a small set of changes: new orgs, a member joining, a plan change or cancellation or reactivation, logins, a duplicate client event id, an orphan login, and one invoice moving to paid.
@@ -99,7 +101,7 @@ The generator's tick skips subscriptions that already have negative MRR, so a la
 
 Start Phase 1 first if you want the marts. The CDC profile is optional.
 
-`docker-compose.cdc.yml` turns on logical replication, Kafka in KRaft mode (no ZooKeeper), and Debezium Connect. `make cdc-prepare` is idempotent: replication role `replicator`, `SELECT` on `app`, publication `app_publication` for the six tables. The connector config is `streaming/register_connector.py`: plugin `pgoutput`, slot `saas_app_slot`, JSON without schemas, tombstones left on.
+`docker-compose.cdc.yml` turns on logical replication, Kafka in KRaft mode (no ZooKeeper), and Debezium Connect. `make cdc-prepare` runs `app_db/cdc/002_cdc.sql`. It is idempotent: replication role `replicator`, `SELECT` on `app`, publication `app_publication` for the six tables. The same command works on a volume created by `make cdc-up` and on a volume that already has Phase 1 data. The connector config is `streaming/register_connector.py`: plugin `pgoutput`, slot `saas_app_slot`, JSON without schemas, tombstones left on.
 
 The consumer reads topics `saas.app.<table>`. `streaming/messages.py` turns an envelope into a change or a dead letter. `streaming/store.py` inserts it. Spark (`streaming/spark_consumer.py`) is what `make cdc-up` runs. `make cdc-up-python` runs `streaming/python_consumer.py` with the same `apply_records` function. Offsets commit after the warehouse transaction. Spark's version of that commit is the checkpoint under `warehouse/cdc_checkpoints`.
 

@@ -2,6 +2,11 @@
 #   docker compose -f docker-compose.yml -f docker-compose.cdc.yml --profile cdc up
 # `make up` does not load this file, so Phase 1 stays Postgres + Airflow.
 #
+# Publication SQL is app_db/cdc/002_cdc.sql, applied by `make cdc-prepare`
+# after this file has restarted Postgres. Do not add that script to
+# /docker-entrypoint-initdb.d. Init runs only on an empty volume, and the
+# Phase 1 command is not in logical WAL mode.
+#
 # mem_limit values are caps, not a measurement of resident memory.
 # Phase 1 caps stay 512 MB (Postgres) and 1536 MB (Airflow).
 # This profile adds Kafka 768 MB, Connect 1024 MB, and Spark 1536 MB.

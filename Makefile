@@ -99,7 +99,7 @@ cdc-down:
 	$(COMPOSE_CDC) --profile cdc --profile cdc-python stop kafka connect spark-consumer python-consumer
 
 cdc-prepare:
-	psql "$(DATABASE_URL)" -v ON_ERROR_STOP=1 -f app_db/init/002_cdc.sql
+	psql "$(DATABASE_URL)" -v ON_ERROR_STOP=1 -f app_db/cdc/002_cdc.sql
 
 cdc-register:
 	CDC_CONNECT_URL=$${CDC_CONNECT_URL:-http://localhost:8083} python -m streaming.register_connector

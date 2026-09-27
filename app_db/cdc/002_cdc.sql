@@ -1,7 +1,8 @@
 -- Logical replication objects for Debezium.
--- Safe to re-run. wal_level=logical is a server setting, not a statement here.
--- Docker: docker-compose.cdc.yml sets it. An existing volume needs a Postgres
--- restart under that file before this script can succeed.
+-- Applied by `make cdc-prepare` (app_db/cdc/002_cdc.sql). This file is not in
+-- app_db/init, so the Phase 1 entrypoint never runs it. wal_level=logical is a
+-- server setting from docker-compose.cdc.yml, not a statement here.
+-- Safe to re-run after that setting is on, on a fresh volume or an existing one.
 
 do $$
 begin
