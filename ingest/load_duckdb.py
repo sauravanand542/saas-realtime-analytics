@@ -9,6 +9,7 @@ from pathlib import Path
 import duckdb
 
 from ingest.contract import TABLES, create_table_sql, warehouse_columns
+from ingest.duckdb_retry import duckdb_session
 
 
 def duckdb_path() -> Path:
@@ -24,8 +25,7 @@ def read_watermarks() -> dict[str, datetime | None]:
     path = duckdb_path()
     if not path.exists():
         return {}
-    con = duckdb.connect(str(path), read_only=True)
-    try:
+    with duckdb_session(path, read_only=True) as con:
         found = con.execute(
             """
             select count(*)
@@ -36,15 +36,12 @@ def read_watermarks() -> dict[str, datetime | None]:
         if not found:
             return {}
         rows = con.execute("select table_name, watermark from raw._ingest_state").fetchall()
-    finally:
-        con.close()
     return {name: watermark for name, watermark in rows}
 
 
 def load(batches: dict[str, list[tuple]], *, full_refresh: bool) -> None:
     path = duckdb_path()
-    con = duckdb.connect(str(path))
-    try:
+    with duckdb_session(path) as con:
         con.execute("create schema if not exists raw")
         con.execute(
             """
@@ -65,8 +62,6 @@ def load(batches: dict[str, list[tuple]], *, full_refresh: bool) -> None:
         except Exception:
             con.execute("rollback")
             raise
-    finally:
-        con.close()
     print(f"loaded duckdb {path}")
 
 

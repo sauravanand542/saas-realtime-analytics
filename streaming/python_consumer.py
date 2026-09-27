@@ -49,7 +49,16 @@ def main() -> None:
         if not records:
             continue
         records.sort(key=lambda record: (record.topic, record.partition, record.offset))
-        stats = apply_records(records, commit_offsets=True)
+        # apply_records opens DuckDB for this batch only and closes it before
+        # returning. Commit Kafka only after that write has committed.
+        try:
+            stats = apply_records(records, commit_offsets=True)
+        except Exception as exc:
+            from ingest.duckdb_retry import DuckDBLockTimeout
+
+            if isinstance(exc, DuckDBLockTimeout):
+                raise SystemExit(str(exc)) from None
+            raise
         _publish_dead_letters(records, servers)
         consumer.commit()
         print(f"landed {stats}")

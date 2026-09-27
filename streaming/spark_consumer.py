@@ -57,7 +57,16 @@ def main() -> None:
                 )
             )
         records.sort(key=lambda record: (record.topic, record.partition, record.offset))
-        stats = apply_records(records, commit_offsets=True, batch_id=f"spark-{epoch_id}")
+        # apply_records opens DuckDB for this batch only and closes it before
+        # returning. Spark checkpoints, the offset commit, only if this returns.
+        try:
+            stats = apply_records(records, commit_offsets=True, batch_id=f"spark-{epoch_id}")
+        except Exception as exc:
+            from ingest.duckdb_retry import DuckDBLockTimeout
+
+            if isinstance(exc, DuckDBLockTimeout):
+                raise RuntimeError(str(exc)) from None
+            raise
         _publish_dead_letters(records, servers)
         print(f"epoch {epoch_id} landed {stats}")
 

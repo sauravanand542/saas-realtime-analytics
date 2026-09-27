@@ -118,7 +118,7 @@ If Postgres fails its first init, the data volume is left half-written. Init scr
 docker compose down -v
 ```
 
-Commands you run on the host talk to Postgres at `localhost:5432`. The Airflow container uses the hostname `postgres`. Do not run a host `dbt build` and an Airflow dbt task at the same time: DuckDB allows one writer on `warehouse/analytics.duckdb`.
+Commands you run on the host talk to Postgres at `localhost:5432`. The Airflow container uses the hostname `postgres`. DuckDB allows one writer on `warehouse/analytics.duckdb`. The CDC consumer closes that file after each batch. `make cdc-lag`, `make ingest`, and `make dbt-build` retry briefly if they hit the lock, and `make cdc-lag` still prints broker lag if the warehouse read gives up. Do not run a host `dbt build` and an Airflow dbt task at the same time: those runs are longer than the retry. Snowflake does not take this file lock.
 
 ```bash
 make seed          # replace app data; SEED defaults to 42
