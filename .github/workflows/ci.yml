@@ -166,8 +166,8 @@ jobs:
         run: |
           set -euxo pipefail
           docker compose -f docker-compose.yml -f docker-compose.cdc.yml --profile cdc run --no-deps --rm \
-            --entrypoint /usr/bin/python3.12 spark-consumer -c \
-            'import os, pyspark, duckdb, streaming; assert os.environ["PYSPARK_PYTHON"] == "/usr/bin/python3.12"; assert os.environ["PYSPARK_DRIVER_PYTHON"] == "/usr/bin/python3.12"; print(pyspark.__version__); print(duckdb.__version__)'
+            --entrypoint /opt/py/bin/python spark-consumer -c \
+            'import os, sys, pyspark, duckdb, streaming; assert sys.version_info[:2] == (3, 12); assert os.environ["PYSPARK_PYTHON"] == "/opt/py/bin/python"; assert os.environ["PYSPARK_DRIVER_PYTHON"] == "/opt/py/bin/python"; print(pyspark.__version__); print(duckdb.__version__)'
       - name: Python consumer imports duckdb and streaming
         run: |
           set -euxo pipefail
