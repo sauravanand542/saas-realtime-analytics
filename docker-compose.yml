@@ -32,6 +32,10 @@ services:
 
   airflow:
     build: .
+    # Match the checkout owner. The image default (uid 50000) cannot write a
+    # bind-mounted warehouse file or dbt target/ and logs/ created on the host.
+    # Group 0 is required by the Airflow entrypoint. Empty AIRFLOW_UID uses 50000.
+    user: "${AIRFLOW_UID:-50000}:0"
     depends_on:
       postgres:
         condition: service_healthy

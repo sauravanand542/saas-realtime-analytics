@@ -174,3 +174,55 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.cdc.yml --profile cdc-python run --no-deps --rm \
             --entrypoint python python-consumer -c \
             'import duckdb, kafka, streaming; print(duckdb.__version__)'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Airflow ingest opens a DuckDB file created on the host
+        run: |
+          set -euxo pipefail
+          python -m pip install 'duckdb==1.5.5'
+          mkdir -p warehouse
+          python - <<'PY'
+          import duckdb
+          con = duckdb.connect("warehouse/analytics.duckdb")
+          con.execute("create table host_marker (id integer)")
+          con.execute("insert into host_marker values (1)")
+          con.close()
+          PY
+          chmod 644 warehouse/analytics.duckdb
+          host_uid=$(id -u)
+          echo "AIRFLOW_UID=${host_uid}" >> .env
+          if ! docker compose up -d --wait --wait-timeout 180 postgres; then
+            docker compose logs postgres
+            exit 1
+          fi
+          # bash is dispatched by the image entrypoint after the metadata DB check.
+          # A path that is not exactly "bash" or "python" would be wrapped as `airflow`.
+          docker compose run --rm --no-deps airflow bash -lc \
+            "set -euo pipefail; test \"\$(id -u)\" = \"${host_uid}\"; test \"\$(id -g)\" = 0; test -x /opt/pipeline-venv/bin/python; /opt/pipeline-venv/bin/python -c 'import duckdb, sys; print(sys.executable)'; /opt/pipeline-venv/bin/python -m ingest --target duckdb"
+          python - <<'PY'
+          import duckdb
+          con = duckdb.connect("warehouse/analytics.duckdb", read_only=True)
+          marker = con.execute("select id from host_marker").fetchall()
+          if marker != [(1,)]:
+              raise SystemExit(f"host marker missing: {marker}")
+          names = {
+              row[0]
+              for row in con.execute(
+                  "select table_name from information_schema.tables where table_schema = 'raw'"
+              ).fetchall()
+          }
+          need = {
+              "organizations",
+              "users",
+              "subscriptions",
+              "subscription_events",
+              "logins",
+              "invoices",
+              "_ingest_state",
+          }
+          missing = need - names
+          if missing:
+              raise SystemExit(f"missing raw tables: {sorted(missing)}")
+          con.close()
+          PY

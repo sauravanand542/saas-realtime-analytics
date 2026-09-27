@@ -107,8 +107,11 @@ source .venv/bin/activate
 pip install -r requirements-dev.txt
 
 cp .env.example .env
+echo "AIRFLOW_UID=$(id -u)" >> .env
 make up
 ```
+
+`AIRFLOW_UID` is the user id Airflow and the CDC consumers run as (group 0). That is what lets them write the bind-mounted `warehouse/analytics.duckdb` file, its WAL, and dbt's `target/` and `logs/`. The copied `.env` leaves it empty, which means uid 50000, and that user cannot open a DuckDB file your account already created. On Linux, `make up`, `make cdc-up`, and `make cdc-up-python` print a warning when it is unset and still start the stack.
 
 Wait until Postgres is healthy (`docker compose ps`). Airflow is at [http://localhost:8080](http://localhost:8080). The local UI user and password are `admin` / `admin` unless you change them in `.env`. The DAG `saas_analytics_batch` is paused on creation and scheduled at 06:00 UTC. Unpause it when you want the scheduler to run it, or trigger it by hand.
 

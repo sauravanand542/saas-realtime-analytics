@@ -24,7 +24,15 @@ RUN set -eux; \
     python3.12 -m pip install --no-cache-dir -r /tmp/requirements-runtime.txt; \
     rm -rf /var/lib/apt/lists/*
 
+# Compose runs this image as ${AIRFLOW_UID}:0. The entrypoint adds that uid to
+# /etc/passwd, and local spark-submit writes under the work dir and $HOME.
+RUN chmod g=u /etc/passwd \
+    && mkdir -p /opt/spark/work-dir \
+    && chgrp -R 0 /opt/spark/work-dir \
+    && chmod -R g+rwX /opt/spark/work-dir
+
 WORKDIR /opt/project
 ENV PYTHONPATH=/opt/project \
+    HOME=/tmp \
     PYSPARK_PYTHON=/usr/bin/python3.12 \
     PYSPARK_DRIVER_PYTHON=/usr/bin/python3.12

@@ -16,6 +16,10 @@ The Python consumer and the Spark `foreachBatch` handler do not keep a connectio
 
 Snowflake does not have this limit. Its connections do not take a file lock, so a consumer and a dbt job can run at the same time. The local tradeoff is that a long DuckDB batch blocks every other writer until that batch commits.
 
+## Containers use the host uid on the bind mount
+
+`warehouse/`, dbt `target/`, and dbt `logs/` are bind-mounted into Airflow and the consumers. A DuckDB file created on the host is owned by that user. The Airflow image's default uid is 50000, and that uid cannot open the file or its WAL. Those services run as `${AIRFLOW_UID:-50000}:0`, which is the Airflow image's own pattern: any uid, group 0. The pipeline virtualenv is group-owned by 0 so that uid can still run it, and the image entrypoint accepts the same gid. Set `AIRFLOW_UID` with `echo "AIRFLOW_UID=$(id -u)" >> .env`. On Linux, `make up`, `make cdc-up`, and `make cdc-up-python` warn when it is empty. They still start, and the container then hits permission denied on a host-owned file.
+
 ## Batch and CDC side by side
 
 The batch extract is still the backfill and the path CI runs. It writes one current row per key to `raw.<table>` with `_source_system = postgres_batch`. The CDC consumer writes one row per change to `raw.<table>_cdc` with `_source_system = debezium` and the same business columns. Staging unions the batch snapshot with the latest CDC row per key. A newer CDC commit hides the snapshot. A newer snapshot hides older CDC. A winning delete removes the key. Marts still read staging, so they did not have to learn about Kafka.
