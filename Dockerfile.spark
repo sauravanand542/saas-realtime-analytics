@@ -36,12 +36,13 @@ RUN set -eux; \
 # Compose runs this image as ${AIRFLOW_UID}:0. Java reads user.home from
 # passwd, not from HOME. With no entry that path is "?", and Ivy then crashes
 # on ?/.ivy2. Group 0 must own the write bit; chmod g=u alone does not change
-# the file's group. The entrypoint records the uid with home /tmp.
-# Kafka jars are resolved once here so spark-submit does not download them.
+# the file's group. scripts/spark_entrypoint.sh records the uid with home /tmp
+# before the Spark entrypoint runs. Kafka jars are resolved once here so
+# spark-submit does not download them.
+COPY scripts/spark_entrypoint.sh /opt/spark-entrypoint.sh
 RUN <<'EOF'
 set -eux
-sed -i 's#${SPARK_USER_NAME:-anonymous uid}:$SPARK_HOME:/bin/false#${SPARK_USER_NAME:-anonymous}:/tmp:/bin/false#' /opt/entrypoint.sh
-grep -q ':/tmp:/bin/false' /opt/entrypoint.sh
+chmod 755 /opt/spark-entrypoint.sh
 chgrp 0 /etc/passwd
 chmod g=u /etc/passwd
 mkdir -p /opt/spark/work-dir /opt/spark/ivy
@@ -95,6 +96,7 @@ PY
 EOF
 
 WORKDIR /opt/project
+ENTRYPOINT ["/opt/spark-entrypoint.sh"]
 ENV PYTHONPATH=/opt/project \
     HOME=/tmp \
     SPARK_SUBMIT_OPTS="-Duser.home=/tmp" \
