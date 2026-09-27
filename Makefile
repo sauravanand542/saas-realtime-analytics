@@ -24,7 +24,8 @@ COMPOSE_CDC := docker compose -f docker-compose.yml -f docker-compose.cdc.yml
 
 .PHONY: help up down logs seed tick ingest dbt-build dbt-docs test break-it heal lint tf-fmt tf-validate \
 	cdc-up cdc-up-python cdc-down cdc-prepare cdc-register cdc-lag \
-	cdc-replay cdc-schema-change cdc-crash cdc-poison consumer-test require-python
+	cdc-replay cdc-schema-change cdc-crash cdc-poison consumer-test require-python \
+	warn-airflow-uid
 
 help:
 	@echo "up          Start Postgres and Airflow"
@@ -56,7 +57,13 @@ help:
 require-python:
 	@./scripts/require_python.sh
 
-up:
+# Do not fail the start. An empty value still selects uid 50000 in Compose.
+warn-airflow-uid:
+	@if [ "$$(uname -s)" = "Linux" ] && [ -z "$${AIRFLOW_UID:-}" ]; then \
+		printf '%s\n' "warning: AIRFLOW_UID is unset. Airflow and the CDC consumers will run as uid 50000 and cannot write warehouse/analytics.duckdb (or its WAL) or dbt target/ and logs/ owned by uid $$(id -u). Run: echo \"AIRFLOW_UID=$$(id -u)\" >> .env" >&2; \
+	fi
+
+up: warn-airflow-uid
 	docker compose up -d --build
 
 down:
@@ -92,10 +99,10 @@ lint:
 	ruff check generator ingest scripts airflow streaming
 	sqlfluff lint transform/models transform/macros transform/snapshots transform/tests
 
-cdc-up:
+cdc-up: warn-airflow-uid
 	$(COMPOSE_CDC) --profile cdc up -d --build
 
-cdc-up-python:
+cdc-up-python: warn-airflow-uid
 	$(COMPOSE_CDC) --profile cdc-python up -d --build
 
 cdc-down:

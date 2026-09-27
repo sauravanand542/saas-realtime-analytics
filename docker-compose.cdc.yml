@@ -95,10 +95,15 @@ services:
       context: .
       dockerfile: Dockerfile.spark
     profiles: ["cdc"]
+    user: "${AIRFLOW_UID:-50000}:0"
+    # The Spark entrypoint writes java_opts.txt in the work dir, and Ivy uses $HOME.
+    # /tmp is writable for any uid. The project stays on PYTHONPATH and the bind mount.
+    working_dir: /tmp
     depends_on:
       kafka:
         condition: service_healthy
     environment:
+      HOME: /tmp
       CDC_CONNECT_URL: http://connect:8083
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       WAREHOUSE_TARGET: ${WAREHOUSE_TARGET:-duckdb}
@@ -132,10 +137,12 @@ services:
       context: .
       dockerfile: Dockerfile.consumer
     profiles: ["cdc-python"]
+    user: "${AIRFLOW_UID:-50000}:0"
     depends_on:
       kafka:
         condition: service_healthy
     environment:
+      HOME: /tmp
       CDC_CONNECT_URL: http://connect:8083
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       WAREHOUSE_TARGET: ${WAREHOUSE_TARGET:-duckdb}

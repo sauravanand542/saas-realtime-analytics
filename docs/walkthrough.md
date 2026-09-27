@@ -77,7 +77,7 @@ Models worth reading in order:
 
 The tick passes `ds_nodash` as the generator seed, so a given logical date is deterministic given the database it finds. Generate and ingest retry. The two dbt build tasks do not. If upstream fails, publish is skipped.
 
-Trigger the DAG from the UI after `make up`, or keep using the Makefile on the host. Do not do both against the same DuckDB file at once.
+Trigger the DAG from the UI after `make up`, or keep using the Makefile on the host. Do not do both against the same DuckDB file at once. Set `AIRFLOW_UID` to your user id before `make up` (the README has the command). The Airflow container runs as that user, so `ingest_raw` can write a DuckDB file the host user created.
 
 ## 6. Terraform
 
