@@ -152,3 +152,25 @@ jobs:
           docker compose exec -T postgres psql -U app -d app -v ON_ERROR_STOP=1 -tA -c \
             "SELECT pubname FROM pg_publication WHERE pubname = 'app_publication'" | grep -qx app_publication
           docker compose -f docker-compose.yml -f docker-compose.cdc.yml down -v
+
+  compose-cdc-images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the CDC profile images
+        run: |
+          set -euxo pipefail
+          docker compose -f docker-compose.yml -f docker-compose.cdc.yml --profile cdc build
+          docker compose -f docker-compose.yml -f docker-compose.cdc.yml --profile cdc-python build
+      - name: Spark consumer imports pyspark, duckdb, and streaming
+        run: |
+          set -euxo pipefail
+          docker compose -f docker-compose.yml -f docker-compose.cdc.yml --profile cdc run --no-deps --rm \
+            --entrypoint /opt/py/bin/python spark-consumer -c \
+            'import os, pyspark, duckdb, streaming; assert os.environ["PYSPARK_PYTHON"] == "/opt/py/bin/python"; assert os.environ["PYSPARK_DRIVER_PYTHON"] == "/opt/py/bin/python"; print(pyspark.__version__); print(duckdb.__version__)'
+      - name: Python consumer imports duckdb and streaming
+        run: |
+          set -euxo pipefail
+          docker compose -f docker-compose.yml -f docker-compose.cdc.yml --profile cdc-python run --no-deps --rm \
+            --entrypoint python python-consumer -c \
+            'import duckdb, kafka, streaming; print(duckdb.__version__)'
