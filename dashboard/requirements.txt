@@ -1,0 +1,5 @@
+# Dashboard only. Install on top of the repo's requirements.txt
+# (which provides duckdb and snowflake-connector-python).
+streamlit==1.65.0
+plotly==7.1.0
+pandas==3.0.6

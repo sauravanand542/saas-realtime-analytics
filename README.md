@@ -4,6 +4,14 @@ A small, laptop-runnable analytics stack for a simulated B2B SaaS product: organ
 
 This repo is a learning project for talking through dbt, Snowflake, Airflow, and Terraform the way a data platform team would build them. Local runs use Docker, Postgres, and DuckDB and do not need a cloud account.
 
+## Demo
+
+[![Demo video: the problem, the dashboard, and the architecture that solves it](docs/demo/saas-realtime-analytics-demo-poster.png)](docs/demo/saas-realtime-analytics-demo.mp4)
+
+A narrated demo, just under two minutes long. It covers why the pipeline exists (trustworthy MRR and churn without slowing down the production app, tested before anything is published, reproducible as data grows) and gives a short look at the dashboard on live Snowflake marts. Most of the video walks through the architecture stage by stage. Watch [the video](docs/demo/saas-realtime-analytics-demo.mp4) or read the [transcript](docs/demo/transcript.md). Results from the Snowflake run are in [docs/demo/snowflake-run-2026-10-02.md](docs/demo/snowflake-run-2026-10-02.md).
+
+The dashboard is in [`dashboard/`](dashboard/README.md) (Streamlit and Plotly). After `make dbt-build`, run `pip install -r dashboard/requirements.txt` and then `make dashboard`. It reads DuckDB by default, and Snowflake when you pass `WAREHOUSE_TARGET=snowflake`.
+
 ## The problem
 
 The application database is the system of record for the product. Analytics questions (monthly recurring revenue, logo churn, who is still paying, how logins and plan changes move) should not be answered by querying that database directly.
@@ -62,6 +70,7 @@ Locally the warehouse is a DuckDB file. The same dbt project has a Snowflake tar
 | `transform/` | dbt project: sources, staging, intermediate, marts, one incremental model, one snapshot, tests, docs. |
 | `airflow/` | Daily DAG: tick, ingest, freshness, upstream build, then marts and snapshots. |
 | `infra/snowflake/` | Terraform for an X-Small warehouse, the analytics database, schemas, and three roles. |
+| `dashboard/` | Streamlit and Plotly dashboard on the marts: MRR, bridge, churn, plans, logins, plan changes. |
 | `scripts/break_it.py` | Writes a negative MRR and shows that a failing test stops the marts from rebuilding. |
 | `streaming/` | Parses Debezium events, deduplicates them, and lands them. Spark is the default consumer. A Python consumer is the smaller alternative. |
 | `docker-compose.cdc.yml` | Kafka in KRaft mode, Debezium Connect, and one consumer. Not started by `make up`. |

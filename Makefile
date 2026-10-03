@@ -22,7 +22,7 @@ endif
 
 COMPOSE_CDC := docker compose -f docker-compose.yml -f docker-compose.cdc.yml
 
-.PHONY: help up down logs seed tick ingest dbt-build dbt-docs test break-it heal lint tf-fmt tf-validate \
+.PHONY: help up down logs seed tick ingest dbt-build dbt-docs test break-it heal dashboard lint tf-fmt tf-validate \
 	cdc-up cdc-up-python cdc-down cdc-reset cdc-prepare cdc-register cdc-lag \
 	cdc-replay cdc-schema-change cdc-crash cdc-poison consumer-test require-python \
 	warn-airflow-uid
@@ -39,6 +39,7 @@ help:
 	@echo "test        Alias for dbt-build"
 	@echo "break-it    Corrupt one subscription and show the publish gate"
 	@echo "heal        Restore that subscription and rebuild"
+	@echo "dashboard   Serve the Streamlit dashboard on the marts (127.0.0.1:8501)"
 	@echo "lint        ruff and sqlfluff"
 	@echo "tf-fmt      terraform fmt"
 	@echo "tf-validate terraform init and validate (no Snowflake credentials required)"
@@ -97,8 +98,11 @@ break-it: require-python
 heal: require-python
 	python -m scripts.heal_it
 
+dashboard: require-python
+	streamlit run dashboard/app.py --server.address 127.0.0.1 --server.port 8501
+
 lint:
-	ruff check generator ingest scripts airflow streaming
+	ruff check generator ingest scripts airflow streaming dashboard
 	sqlfluff lint transform/models transform/macros transform/snapshots transform/tests
 
 cdc-up: warn-airflow-uid
